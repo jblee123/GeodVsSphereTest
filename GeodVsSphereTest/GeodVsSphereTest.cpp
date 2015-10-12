@@ -11,7 +11,7 @@ using namespace GeographicLib;
 
 struct GeoCoord
 {
-    double lat, lon;
+    double lat, lon, alt;
 };
 
 const double a = Constants::WGS84_a();
@@ -39,8 +39,8 @@ void getMidpointXyz(GeoCoord pt1, GeoCoord pt2,
     T& sphere_mid_x, T& sphere_mid_y, T& sphere_mid_z)
 {
     double x1_d, y1_d, z1_d, x2_d, y2_d, z2_d;
-    earth.Forward(pt1.lat, pt1.lon, 0, x1_d, y1_d, z1_d);
-    earth.Forward(pt2.lat, pt2.lon, 0, x2_d, y2_d, z2_d);
+    earth.Forward(pt1.lat, pt1.lon, pt1.alt, x1_d, y1_d, z1_d);
+    earth.Forward(pt2.lat, pt2.lon, pt2.alt, x2_d, y2_d, z2_d);
 
     T x1 = (T)x1_d;
     T y1 = (T)y1_d;
@@ -72,6 +72,7 @@ void getMidpointXyz(GeoCoord pt1, GeoCoord pt2,
 void checkGeoVsSphere(double lat1, double lon1, double lat2, double lon2)
 {
     const double EARTH_CIRCUMFERENCE = 2.0 * GeographicLib::Math::pi() * a;
+    const double ALTITUDE = 0;
 
     double total_dist, start_dir, end_dir;
     geods.Inverse(lat1, lon1, lat2, lon2, total_dist, start_dir, end_dir);
@@ -88,16 +89,17 @@ void checkGeoVsSphere(double lat1, double lon1, double lat2, double lon2)
         double seg_len = total_dist / (double)seg_count;
 
         std::vector<GeoCoord> coords;
-        coords.push_back({ lat1, lon1 });
+        coords.push_back({ lat1, lon1, ALTITUDE });
 
         for (int pt = 1; pt < seg_count; pt++)
         {
             GeoCoord ctrl_pt;
             geods.Direct(lat1, lon1, start_dir, seg_len * pt, ctrl_pt.lat, ctrl_pt.lon);
+            ctrl_pt.alt = ALTITUDE;
             coords.push_back(ctrl_pt);
         }
 
-        coords.push_back({ lat2, lon2 });
+        coords.push_back({ lat2, lon2, ALTITUDE });
 
         double max_error_from_double = 0;
         double max_error_from_float = 0;
@@ -114,10 +116,11 @@ void checkGeoVsSphere(double lat1, double lon1, double lat2, double lon2)
             geods.Direct(
                 pt1.lat, pt1.lon, geod_start_dir, geod_dist / 2.0,
                 geod_latlon_midpt.lat, geod_latlon_midpt.lon);
+            geod_latlon_midpt.alt = (pt1.alt + pt2.alt) / 2.0;
 
             double geod_x_midpt, geod_y_midpt, geod_z_midpt;
             earth.Forward(
-                geod_latlon_midpt.lat, geod_latlon_midpt.lon, 0,
+                geod_latlon_midpt.lat, geod_latlon_midpt.lon, geod_latlon_midpt.alt,
                 geod_x_midpt, geod_y_midpt, geod_z_midpt);
 
             double sphere_mid_x_d, sphere_mid_y_d, sphere_mid_z_d;
