@@ -6,6 +6,7 @@
 #include <GeographicLib/Geodesic.hpp>
 #include <GeographicLib/GeodesicLine.hpp>
 #include <GeographicLib/Math.hpp>
+#include <GeographicLib/Rhumb.hpp>
 
 using namespace GeographicLib;
 
@@ -17,6 +18,7 @@ struct GeoCoord
 const double a = Constants::WGS84_a();
 const double f = Constants::WGS84_f();
 const Geodesic geods(a, f);
+const Rhumb rhumb(a, f);
 const Geocentric earth(a, f);
 
 template<typename T>
@@ -69,85 +71,134 @@ void getMidpointXyz(GeoCoord pt1, GeoCoord pt2,
     sphere_mid_z *= mid_magnitude;
 }
 
-void checkGeoVsSphere(double lat1, double lon1, double lat2, double lon2)
+enum LineType { GC, RHUMB };
+
+void getError(
+    double lat1, double lon1, double lat2, double lon2, LineType line_type,
+    double total_dist, double start_dir, double line_divisor,
+    double& seg_len, double& max_error)
 {
     const double EARTH_CIRCUMFERENCE = 2.0 * GeographicLib::Math::pi() * a;
     const double ALTITUDE = 0;
 
-    double total_dist, start_dir, end_dir;
-    geods.Inverse(lat1, lon1, lat2, lon2, total_dist, start_dir, end_dir);
+    double max_seg_len = (EARTH_CIRCUMFERENCE / 2.0) / line_divisor;
+    int seg_count = (int)ceil(total_dist / max_seg_len);
+    seg_len = total_dist / (double)seg_count;
 
-    printf("divs  seg dist   err (d)   err (f)\n");
-    printf("---- --------- --------- ---------\n");
+    std::vector<GeoCoord> coords;
+    coords.push_back({ lat1, lon1, ALTITUDE });
+
+    for (int pt = 1; pt < seg_count; pt++)
+    {
+        GeoCoord ctrl_pt;
+        if (line_type == GC)
+        {
+            geods.Direct(lat1, lon1, start_dir, seg_len * pt, ctrl_pt.lat, ctrl_pt.lon);
+        }
+        else
+        {
+            rhumb.Direct(lat1, lon1, start_dir, seg_len * pt, ctrl_pt.lat, ctrl_pt.lon);
+        }
+        ctrl_pt.alt = ALTITUDE;
+        coords.push_back(ctrl_pt);
+    }
+
+    coords.push_back({ lat2, lon2, ALTITUDE });
+
+    max_error = 0;
+    for (unsigned int ctrl_pt = 0; ctrl_pt < coords.size() - 1; ctrl_pt++)
+    {
+        double geod_dist, geod_start_dir, geod_end_dir;
+        auto& pt1 = coords[ctrl_pt];
+        auto& pt2 = coords[ctrl_pt + 1];
+        if (line_type == GC)
+        {
+            geods.Inverse(
+                pt1.lat, pt1.lon, pt2.lat, pt2.lon,
+                geod_dist, geod_start_dir, geod_end_dir);
+        }
+        else
+        {
+            rhumb.Inverse(
+                pt1.lat, pt1.lon, pt2.lat, pt2.lon,
+                geod_dist, geod_start_dir, geod_end_dir);
+        }
+
+        GeoCoord geod_latlon_midpt;
+        if (line_type == GC)
+        {
+            geods.Direct(
+                pt1.lat, pt1.lon, geod_start_dir, geod_dist / 2.0,
+                geod_latlon_midpt.lat, geod_latlon_midpt.lon);
+        }
+        else
+        {
+            rhumb.Direct(
+                pt1.lat, pt1.lon, geod_start_dir, geod_dist / 2.0,
+                geod_latlon_midpt.lat, geod_latlon_midpt.lon);
+        }
+
+        geod_latlon_midpt.alt = (pt1.alt + pt2.alt) / 2.0;
+
+        double geod_x_midpt, geod_y_midpt, geod_z_midpt;
+        earth.Forward(
+            geod_latlon_midpt.lat, geod_latlon_midpt.lon, geod_latlon_midpt.alt,
+            geod_x_midpt, geod_y_midpt, geod_z_midpt);
+
+        double sphere_mid_x_d, sphere_mid_y_d, sphere_mid_z_d;
+        getMidpointXyz(
+            pt1, pt2, sphere_mid_x_d, sphere_mid_y_d, sphere_mid_z_d);
+
+        double dx = geod_x_midpt - sphere_mid_x_d;
+        double dy = geod_y_midpt - sphere_mid_y_d;
+        double dz = geod_z_midpt - sphere_mid_z_d;
+
+        float sphere_mid_x_f, sphere_mid_y_f, sphere_mid_z_f;
+        getMidpointXyz(
+            pt1, pt2, sphere_mid_x_f, sphere_mid_y_f, sphere_mid_z_f);
+
+        double error = length(dx, dy, dz);
+        max_error = std::max(max_error, error);
+
+        //dx = geod_x_midpt - sphere_mid_x_f;
+        //dy = geod_y_midpt - sphere_mid_y_f;
+        //dz = geod_z_midpt - sphere_mid_z_f;
+
+        //error = length(dx, dy, dz);
+        //max_error_from_float = std::max(max_error_from_float, error);
+    }
+}
+
+void checkGeoVsSphere(double lat1, double lon1, double lat2, double lon2)
+{
+    double total_dist_gc, start_dir_gc, end_dir_gc;
+    geods.Inverse(lat1, lon1, lat2, lon2, total_dist_gc, start_dir_gc, end_dir_gc);
+
+    double total_dist_rhumb, start_dir_rhumb, end_dir_rhumb;
+    rhumb.Inverse(lat1, lon1, lat2, lon2, total_dist_rhumb, start_dir_rhumb, end_dir_rhumb);
+
+    printf("divs seg dist(g) seg dist(r)   err (g)   err (r)\n");
+    printf("---- ----------- ----------- --------- ---------\n");
 
     for (double line_divisor = 2;
         line_divisor <= 4096;
         line_divisor *= 2)
     {
-        double max_seg_len = (EARTH_CIRCUMFERENCE / 2.0) / line_divisor;
-        int seg_count = (int)ceil(total_dist / max_seg_len);
-        double seg_len = total_dist / (double)seg_count;
+        double seg_len_gc, seg_len_rhumb, max_error_from_gc, max_error_from_rhumb;
 
-        std::vector<GeoCoord> coords;
-        coords.push_back({ lat1, lon1, ALTITUDE });
+        getError(
+            lat1, lon1, lat2, lon2, GC,
+            total_dist_gc, start_dir_gc, line_divisor,
+            seg_len_gc, max_error_from_gc);
 
-        for (int pt = 1; pt < seg_count; pt++)
-        {
-            GeoCoord ctrl_pt;
-            geods.Direct(lat1, lon1, start_dir, seg_len * pt, ctrl_pt.lat, ctrl_pt.lon);
-            ctrl_pt.alt = ALTITUDE;
-            coords.push_back(ctrl_pt);
-        }
+        getError(
+            lat1, lon1, lat2, lon2, RHUMB,
+            total_dist_rhumb, start_dir_rhumb, line_divisor,
+            seg_len_rhumb, max_error_from_rhumb);
 
-        coords.push_back({ lat2, lon2, ALTITUDE });
-
-        double max_error_from_double = 0;
-        double max_error_from_float = 0;
-        for (unsigned int ctrl_pt = 0; ctrl_pt < coords.size() - 1; ctrl_pt++)
-        {
-            double geod_dist, geod_start_dir, geod_end_dir;
-            auto& pt1 = coords[ctrl_pt];
-            auto& pt2 = coords[ctrl_pt + 1];
-            geods.Inverse(
-                pt1.lat, pt1.lon, pt2.lat, pt2.lon,
-                geod_dist, geod_start_dir, geod_end_dir);
-
-            GeoCoord geod_latlon_midpt;
-            geods.Direct(
-                pt1.lat, pt1.lon, geod_start_dir, geod_dist / 2.0,
-                geod_latlon_midpt.lat, geod_latlon_midpt.lon);
-            geod_latlon_midpt.alt = (pt1.alt + pt2.alt) / 2.0;
-
-            double geod_x_midpt, geod_y_midpt, geod_z_midpt;
-            earth.Forward(
-                geod_latlon_midpt.lat, geod_latlon_midpt.lon, geod_latlon_midpt.alt,
-                geod_x_midpt, geod_y_midpt, geod_z_midpt);
-
-            double sphere_mid_x_d, sphere_mid_y_d, sphere_mid_z_d;
-            getMidpointXyz(
-                pt1, pt2, sphere_mid_x_d, sphere_mid_y_d, sphere_mid_z_d);
-
-            double dx = geod_x_midpt - sphere_mid_x_d;
-            double dy = geod_y_midpt - sphere_mid_y_d;
-            double dz = geod_z_midpt - sphere_mid_z_d;
-
-            float sphere_mid_x_f, sphere_mid_y_f, sphere_mid_z_f;
-            getMidpointXyz(
-                pt1, pt2, sphere_mid_x_f, sphere_mid_y_f, sphere_mid_z_f);
-
-            double error = length(dx, dy, dz);
-            max_error_from_double = std::max(max_error_from_double, error);
-
-            dx = geod_x_midpt - sphere_mid_x_f;
-            dy = geod_y_midpt - sphere_mid_y_f;
-            dz = geod_z_midpt - sphere_mid_z_f;
-
-            error = length(dx, dy, dz);
-            max_error_from_float = std::max(max_error_from_float, error);
-        }
-
-        printf("%4d  %8d %9.04f %9.04f\n",
-            (int)line_divisor, (int)seg_len, max_error_from_double, max_error_from_float);
+        printf("%4d  %8d %8d %9.04f %12.04f\n",
+            (int)line_divisor, (int)seg_len_gc, (int)seg_len_rhumb,
+            max_error_from_gc, max_error_from_rhumb);
     }
 }
 
