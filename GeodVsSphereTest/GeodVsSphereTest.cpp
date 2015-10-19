@@ -350,18 +350,33 @@ Mat3x3<T> getTempalteToSegMatrix(
 	return template_to_seg;
 }
 
+template<typename T>
+GeocentricCoord<T> getCoordFromTemplate(
+	GeocentricCoord<T> template_coord,
+	T scale_factor, Mat3x3<T> template_to_seg_transform,
+	GeocentricCoord<T> p1) {
+
+	template_coord = template_coord * scale_factor;
+	template_coord = template_to_seg_transform * template_coord;
+	template_coord = template_coord + p1;
+
+	return template_coord;
+}
+
+
 void testSegment(GeodeticCoord<double> coord1, GeodeticCoord<double> coord2,
 	const std::vector<GeocentricCoord<double>>& arc_template_d,
-	const std::vector<GeocentricCoord<float>>& arc_template_f) {
-	printf("(%f, %f, %f)->(%f, %f, %f)\n",
-		coord1.lat, coord1.lon, coord1.alt,
-		coord2.lat, coord2.lon, coord2.alt);
+	const std::vector<GeocentricCoord<float>>& arc_template_f,
+	double& max_error_via_f, double& max_error_via_d) {
+	//printf("(%7.02f, %7.02f, %d)->(%7.02f, %7.02f, %d)\n",
+	//	coord1.lat, coord1.lon, (int)coord1.alt,
+	//	coord2.lat, coord2.lon, (int)coord2.alt);
 
 	double base_dist, start_dir, end_dir;
 	geods.Inverse(coord1.lat, coord1.lon, coord2.lat, coord2.lon, base_dist, start_dir, end_dir);
 
 	std::vector<GeocentricCoord<double>> baseline_wpts;
-	for (int i = 1; i <= SEG_DIVISOR - 1; i++) {
+	for (int i = 1; i <= SEG_DIVISOR; i++) {
 		double frac = (double)i / (double)SEG_DIVISOR;
 		double dist = base_dist * frac;
 
@@ -414,18 +429,37 @@ void testSegment(GeodeticCoord<double> coord1, GeodeticCoord<double> coord2,
 	Mat3x3<float> template_to_seg_f = getTempalteToSegMatrix(p1_f, p2_f, p1_nrm_f);
 	Mat3x3<double> template_to_seg_d = getTempalteToSegMatrix(p1_d, p2_d, p1_nrm_d);
 
+	max_error_via_f = 0;
+	max_error_via_d = 0;
+
 	float template_scale_factor_f = length(p2_f - p1_f) / length(arc_template_f.back());
 	double template_scale_factor_d = length(p2_d - p1_d) / length(arc_template_d.back());
+
+	GeocentricCoord<float> template_coord_back_f = arc_template_f.back();
+	template_coord_back_f = getCoordFromTemplate(
+		template_coord_back_f, template_scale_factor_f, template_to_seg_f, p1_f);
+
+	GeocentricCoord<double> template_coord_back_d = arc_template_d.back();
+	template_coord_back_d = getCoordFromTemplate(
+		template_coord_back_d, template_scale_factor_d, template_to_seg_d, p1_d);
+
+	GeocentricCoord<float> offset_f = p2_f - template_coord_back_f;
+	GeocentricCoord<double> offset_d = p2_d - template_coord_back_d;
+
 	for (int i = 0; i < baseline_wpts.size(); i++) {
 		GeocentricCoord<float> template_coord_f = arc_template_f[i + 1];
-		template_coord_f = template_coord_f * template_scale_factor_f;
-		template_coord_f = template_to_seg_f * template_coord_f;
-		template_coord_f = template_coord_f + p1_f;
+		template_coord_f = getCoordFromTemplate(
+			template_coord_f, template_scale_factor_f, template_to_seg_f, p1_f);
+		GeocentricCoord<float> correction_f =
+			offset_f * ((float)(i + 1) / (float)baseline_wpts.size());
+		template_coord_f = template_coord_f + correction_f;
 
 		GeocentricCoord<double> template_coord_d = arc_template_d[i + 1];
-		template_coord_d = template_coord_d * template_scale_factor_d;
-		template_coord_d = template_to_seg_d * template_coord_d;
-		template_coord_d = template_coord_d + p1_d;
+		template_coord_d = getCoordFromTemplate(
+			template_coord_d, template_scale_factor_d, template_to_seg_d, p1_d);
+		GeocentricCoord<double> correction_d =
+			offset_d * ((double)(i + 1) / (double)baseline_wpts.size());
+		template_coord_d = template_coord_d + correction_d;
 
 		GeocentricCoord<double> template_coord_f_as_d = {
 			(double)template_coord_f.x,
@@ -438,8 +472,12 @@ void testSegment(GeodeticCoord<double> coord1, GeodeticCoord<double> coord2,
 
 		double error_via_f = length(template_coord_f_as_d - ref_coord);
 		double error_via_d = length(template_coord_d - ref_coord);
-		printf("%f / %f\n", error_via_f, error_via_d);
+
+		max_error_via_f = std::max(max_error_via_f, error_via_f);
+		max_error_via_d = std::max(max_error_via_d, error_via_d);
+		//printf("%f / %f\n", error_via_f, error_via_d);
 	}
+	//printf("%f / %f\n", max_error_via_f, max_error_via_d);
 }
 
 int _tmain(int argc, _TCHAR* argv[]) {
@@ -460,19 +498,27 @@ int _tmain(int argc, _TCHAR* argv[]) {
     //    check_coords(lat1, lon1, lat2, lon2);
     //}
 
+	printf("max seg len: %f\n", MAX_SEG_LEN);
+
 	std::vector<GeocentricCoord<double>> arc_template_d;
 	std::vector<GeocentricCoord<float>> arc_template_f;
 	generateArcTemplate(arc_template_d);
 	generateArcTemplate(arc_template_f);
 
-	for (int i = 0; i < 25; i++) {
+	double max_error_via_f = 0;
+	double max_error_via_d = 0;
+
+	for (int i = 0; i < 100000; i++) {
 		double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
 		lat1 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
 		lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
 		geods.Direct(lat1, lon1, dir, MAX_SEG_LEN, lat2, lon2);
 
-		double alt1 = ((double)rand() / (double)RAND_MAX) * 100000.0;
-		double alt2 = alt1;
+		//double alt1 = ((double)rand() / (double)RAND_MAX) * 100000.0;
+		//double alt2 = alt1;
+
+		double alt1 = 0;
+		double alt2 = 0;
 
 		//double alt1 = 0;
 		//double alt2 = 0;
@@ -481,10 +527,18 @@ int _tmain(int argc, _TCHAR* argv[]) {
 		//double dir = 45;
 		//geods.Direct(lat1, lon1, dir, MAX_SEG_LEN, lat2, lon2);
 
+		double max_error_via_f_inner = 0;
+		double max_error_via_d_inner = 0;
 		testSegment(
 			{ lat1, lon1, alt1 }, { lat2, lon2, alt2 },
-			arc_template_d, arc_template_f);
+			arc_template_d, arc_template_f,
+			max_error_via_f_inner, max_error_via_d_inner);
+
+		max_error_via_f = std::max(max_error_via_f, max_error_via_f_inner);
+		max_error_via_d = std::max(max_error_via_d, max_error_via_d_inner);
 	}
-	
+
+	printf("%f / %f\n", max_error_via_f, max_error_via_d);
+
 	return 0;
 }
