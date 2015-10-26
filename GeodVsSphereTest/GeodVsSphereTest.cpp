@@ -113,6 +113,35 @@ GeocentricCoord<T> cross(GeocentricCoord<T> v1, GeocentricCoord<T> v2) {
 }
 
 template<typename T>
+GeocentricCoord<T> geoToXYZ(T lat, T lon, T alt)
+{
+   T n, a, b, e;
+   T sinlat, coslat, sinlon, coslon;
+
+   // Convert to radians
+   T rlat = lat * (T)0.0174532925199433;
+   T rlon = lon * (T)0.0174532925199433;
+
+   sinlat = sin(rlat);
+   coslat = cos(rlat);
+   sinlon = sin(rlon);
+   coslon = cos(rlon);
+
+   a = 6378137.0;  // WGS84 meters at equator
+
+   b = (T)6356752.3142;
+   e = (T)0.99330561999;
+   n = (a * a) / sqrt((a * a * coslat * coslat) + (b * b * sinlat * sinlat));
+
+   GeocentricCoord<T> result;
+   result.x = (n + alt) * coslat * coslon;
+   result.y = (n + alt) * coslat * sinlon;
+   result.z = ((n * e) + alt) * sinlat;
+
+   return result;
+}
+
+template<typename T>
 void getMidpointXyz(GeodeticCoord<double> pt1, GeodeticCoord<double> pt2,
     T& sphere_mid_x, T& sphere_mid_y, T& sphere_mid_z) {
 
@@ -387,31 +416,54 @@ void testArcTemplate(
 	GeodeticCoord<double> coord1, GeodeticCoord<double> coord2,
 	const std::vector<GeocentricCoord<double>>& arc_template_d,
 	const std::vector<GeocentricCoord<float>>& arc_template_f,
-	double& max_error_via_f, double& max_error_via_f_ut, double& max_error_via_d,
-	double& max_midpoint_error_d) {
+   double& max_error_via_f_gc, double& max_error_via_f_ut_gc,
+   double& max_error_via_d_gc, double& max_midpoint_error_d_gc,
+   double& max_error_via_f_rhumb, double& max_error_via_f_ut_rhumb,
+   double& max_error_via_d_rhumb) {
 
 	//printf("(%7.02f, %7.02f, %d)->(%7.02f, %7.02f, %d)\n",
 	//	coord1.lat, coord1.lon, (int)coord1.alt,
 	//	coord2.lat, coord2.lon, (int)coord2.alt);
 
-	double base_dist, start_dir, end_dir;
-	geods.Inverse(coord1.lat, coord1.lon, coord2.lat, coord2.lon, base_dist, start_dir, end_dir);
+   double base_dist_gc, start_dir_gc, end_dir_gc;
+   geods.Inverse(
+      coord1.lat, coord1.lon, coord2.lat, coord2.lon,
+      base_dist_gc, start_dir_gc, end_dir_gc);
+
+   double base_dist_rhumb, start_dir_rhumb, end_dir_rhumb;
+   rhumb.Inverse(
+      coord1.lat, coord1.lon, coord2.lat, coord2.lon,
+      base_dist_rhumb, start_dir_rhumb, end_dir_rhumb);
 
 	const int SUBSEG_COUNT = arc_template_f.size() - 1;
 
-	std::vector<GeocentricCoord<double>> baseline_wpts;
+   std::vector<GeocentricCoord<double>> baseline_wpts_gc;
+   std::vector<GeocentricCoord<double>> baseline_wpts_rhumb;
 	for (int i = 0; i <= SUBSEG_COUNT; i++) {
-		double frac = (double)i / (double)SUBSEG_COUNT;
-		double dist = base_dist * frac;
+      double dist;
+      double lat, lon, alt;
+      GeocentricCoord<double> wpt;
 
-		double lat, lon, alt;
-		geods.Direct(coord1.lat, coord1.lon, start_dir, dist, lat, lon);
+      double frac = (double)i / (double)SUBSEG_COUNT;
+
+      // gc baseline wpt
+      dist = base_dist_gc * frac;
+
+      geods.Direct(coord1.lat, coord1.lon, start_dir_gc, dist, lat, lon);
 		alt = coord1.alt + (coord2.alt - coord1.alt) * frac;
 
-		GeocentricCoord<double> wpt;
 		earth.Forward(lat, lon, alt, wpt.x, wpt.y, wpt.z);
-		baseline_wpts.push_back(wpt);
-	}
+      baseline_wpts_gc.push_back(wpt);
+
+      // rhumb baseline wpt
+      dist = base_dist_rhumb * frac;
+
+      geods.Direct(coord1.lat, coord1.lon, start_dir_rhumb, dist, lat, lon);
+      alt = coord1.alt + (coord2.alt - coord1.alt) * frac;
+
+      earth.Forward(lat, lon, alt, wpt.x, wpt.y, wpt.z);
+      baseline_wpts_rhumb.push_back(wpt);
+   }
 
 	GeocentricCoord<double> p1_d, p2_d;
 	earth.Forward(coord1.lat, coord1.lon, coord1.alt, p1_d.x, p1_d.y, p1_d.z);
@@ -461,10 +513,10 @@ void testArcTemplate(
 	Mat3x3<float> template_to_seg_f = getTempalteToSegMatrix(p1_f, p2_f, p1_nrm_f);
 	Mat3x3<double> template_to_seg_d = getTempalteToSegMatrix(p1_d, p2_d, p1_nrm_d);
 
-	max_error_via_f = 0;
-	max_error_via_f_ut = 0;
-	max_error_via_d = 0;
-	max_midpoint_error_d = 0;
+   max_error_via_f_gc = 0;
+   max_error_via_f_ut_gc = 0;
+   max_error_via_d_gc = 0;
+   max_midpoint_error_d_gc = 0;
 
 	float template_scale_factor_f = length(p2_f - p1_f) / length(arc_template_f.back());
 	float template_scale_factor_f_ut = length(p2_f_ut - p1_f_ut) / length(arc_template_f.back());
@@ -488,9 +540,9 @@ void testArcTemplate(
 
 	GeocentricCoord<double> last_template_coord_d;
 
-	for (unsigned int i = 0; i < baseline_wpts.size(); i++) {
-		float offset_frac_f = (float)i / ((float)baseline_wpts.size() - 1.0f);
-		double offset_frac_d = (double)i / ((double)baseline_wpts.size() - 1.0);
+	for (unsigned int i = 0; i < baseline_wpts_gc.size(); i++) {
+		float offset_frac_f = (float)i / ((float)baseline_wpts_gc.size() - 1.0f);
+		double offset_frac_d = (double)i / ((double)baseline_wpts_gc.size() - 1.0);
 
 		offset_frac_f *= offset_frac_f;
 		offset_frac_d *= offset_frac_d;
@@ -525,16 +577,18 @@ void testArcTemplate(
 			(double)template_coord_f_ut.z
 		};
 
-		GeocentricCoord<double> ref_coord = baseline_wpts[i];
-		ref_coord = ref_coord - eye_pos;
+      // get gc error
+      GeocentricCoord<double> ref_coord_gc = baseline_wpts_gc[i];
+      ref_coord_gc = ref_coord_gc - eye_pos;
 
-		GeocentricCoord<double> ref_coord_ut = baseline_wpts[i];
+      GeocentricCoord<double> ref_coord_ut_gc = baseline_wpts_gc[i];
 
-		double error_via_f = length(template_coord_f_as_d - ref_coord);
-		double error_via_d = length(template_coord_d - ref_coord);
+      double error_via_f_gc = length(template_coord_f_as_d - ref_coord_gc);
+      double error_via_d_gc = length(template_coord_d - ref_coord_gc);
 
-		double error_via_f_ut = length(template_coord_f_ut_as_d - ref_coord_ut);
+      double error_via_f_ut_gc = length(template_coord_f_ut_as_d - ref_coord_ut_gc);
 
+      // get midpoint error
 		if (i > 0) {
 			GeocentricCoord<double> midpt = (last_template_coord_d + template_coord_d) * 0.5;
 
@@ -559,17 +613,33 @@ void testArcTemplate(
 				geod_midpt.x, geod_midpt.y, geod_midpt.z);
 
 			double midpoint_error = length(geod_midpt - midpt);
-			max_midpoint_error_d = std::max(max_midpoint_error_d, midpoint_error);
-			//printf("midpt err: %f\n", midpoint_error);
+         max_midpoint_error_d_gc = std::max(max_midpoint_error_d_gc, midpoint_error);
 		}
 
 		last_template_coord_d = template_coord_d;
 
-		max_error_via_f = std::max(max_error_via_f, error_via_f);
-		max_error_via_f_ut = std::max(max_error_via_f_ut, error_via_f_ut);
-		max_error_via_d = std::max(max_error_via_d, error_via_d);
-		//printf("%f / %f\n", error_via_f, error_via_d);
-		//printf("%f / %f / %f\n", error_via_f, error_via_f_ut, error_via_d);
+      // get rhumb line error
+      GeocentricCoord<double> ref_coord_rhumb = baseline_wpts_rhumb[i];
+      ref_coord_rhumb = ref_coord_rhumb - eye_pos;
+
+      GeocentricCoord<double> ref_coord_ut_rhumb = baseline_wpts_rhumb[i];
+
+      double error_via_f_rhumb = length(template_coord_f_as_d - ref_coord_rhumb);
+      double error_via_d_rhumb = length(template_coord_d - ref_coord_rhumb);
+
+      double error_via_f_ut_rhumb = length(template_coord_f_ut_as_d - ref_coord_ut_rhumb);
+
+      max_error_via_f_gc = std::max(max_error_via_f_gc, error_via_f_gc);
+      max_error_via_f_ut_gc = std::max(max_error_via_f_ut_gc, error_via_f_ut_gc);
+      max_error_via_d_gc = std::max(max_error_via_d_gc, error_via_d_gc);
+      
+      max_error_via_f_rhumb = std::max(max_error_via_f_rhumb, error_via_f_rhumb);
+      max_error_via_f_ut_rhumb = std::max(max_error_via_f_ut_rhumb, error_via_f_ut_rhumb);
+      max_error_via_d_rhumb = std::max(max_error_via_d_rhumb, error_via_d_rhumb);
+
+      //printf("%f / %f\n", error_via_f, error_via_d);
+      //printf("%f / %f / %f\n", error_via_f, error_via_f_ut, error_via_d);
+      //printf("%f / %f / %f\n", error_via_f_rhumb, error_via_f_ut_rhumb, error_via_d_rhumb);
 	}
 	//printf("%f / %f\n", max_error_via_f, max_error_via_d);
 }
@@ -597,10 +667,13 @@ void testArcTemplateMethod() {
 	generateArcTemplate(STARTING_LINE_DIVISOR, SEG_DIVISOR, arc_template_d);
 	generateArcTemplate(STARTING_LINE_DIVISOR, SEG_DIVISOR, arc_template_f);
 
-	double max_error_via_f = 0;
-	double max_error_via_f_ut = 0;
-	double max_error_via_d = 0;
-	double max_midpoint_error_d = 0;
+	double max_error_via_f_gc = 0;
+   double max_error_via_f_ut_gc = 0;
+   double max_error_via_d_gc = 0;
+   double max_midpoint_error_d_gc = 0;
+   double max_error_via_f_rhumb = 0;
+   double max_error_via_f_ut_rhumb = 0;
+   double max_error_via_d_rhumb = 0;
 
 	srand(0);
 	for (int i = 0; i < TEST_COUNT; i++) {
@@ -614,24 +687,33 @@ void testArcTemplateMethod() {
 		double alt1 = ((double)rand() / (double)RAND_MAX) * 100000.0;
 		double alt2 = alt1;
 
-		double max_error_via_f_inner = 0;
-		double max_error_via_f_ut_inner = 0;
-		double max_error_via_d_inner = 0;
-		double max_midpoint_error_d_inner = 0;
-		testArcTemplate(
+      double max_error_via_f_inner_gc = 0;
+      double max_error_via_f_ut_inner_gc = 0;
+      double max_error_via_d_inner_gc = 0;
+      double max_midpoint_error_d_inner_gc = 0;
+      double max_error_via_f_inner_rhumb = 0;
+      double max_error_via_f_ut_inner_rhumb = 0;
+      double max_error_via_d_inner_rhumb = 0;
+      testArcTemplate(
 			{ lat1, lon1, alt1 }, { lat2, lon2, alt2 },
 			arc_template_d, arc_template_f,
-			max_error_via_f_inner, max_error_via_f_ut_inner, max_error_via_d_inner,
-			max_midpoint_error_d_inner);
+         max_error_via_f_inner_gc, max_error_via_f_ut_inner_gc,
+         max_error_via_d_inner_gc, max_midpoint_error_d_inner_gc,
+         max_error_via_f_inner_rhumb, max_error_via_f_ut_inner_rhumb,
+         max_error_via_d_inner_rhumb);
 
-		max_error_via_f = std::max(max_error_via_f, max_error_via_f_inner);
-		max_error_via_f_ut = std::max(max_error_via_f_ut, max_error_via_f_ut_inner);
-		max_error_via_d = std::max(max_error_via_d, max_error_via_d_inner);
-		max_midpoint_error_d = std::max(max_midpoint_error_d, max_midpoint_error_d_inner);
-	}
+      max_error_via_f_gc = std::max(max_error_via_f_gc, max_error_via_f_inner_gc);
+      max_error_via_f_ut_gc = std::max(max_error_via_f_ut_gc, max_error_via_f_ut_inner_gc);
+      max_error_via_d_gc = std::max(max_error_via_d_gc, max_error_via_d_inner_gc);
+      max_midpoint_error_d_gc = std::max(max_midpoint_error_d_gc, max_midpoint_error_d_inner_gc);
+      max_error_via_f_rhumb = std::max(max_error_via_f_rhumb, max_error_via_f_inner_rhumb);
+      max_error_via_f_ut_rhumb = std::max(max_error_via_f_ut_rhumb, max_error_via_f_ut_inner_rhumb);
+      max_error_via_d_rhumb = std::max(max_error_via_d_rhumb, max_error_via_d_inner_rhumb);
+   }
 
-	printf("\n%f / %f / %f / %f\n",
-		max_error_via_f, max_error_via_f_ut, max_error_via_d, max_midpoint_error_d);
+	printf("\n%.3f / %.3f / %.3f / %.3f / %.3f / %.3f / %.3f\n",
+      max_error_via_f_gc, max_error_via_f_ut_gc, max_error_via_d_gc, max_midpoint_error_d_gc,
+      max_error_via_f_rhumb, max_error_via_f_ut_rhumb, max_error_via_d_rhumb);
 }
 
 void testGeodMidpointToStraightLineMidpointError() {
@@ -670,6 +752,64 @@ void testGeodMidpointToStraightLineMidpointError() {
 	}
 }
 
+void testRhumbLineAsFloatError()
+{
+   const int TEST_COUNT = 25;
+   const int STARTING_LINE_DIVISOR = 64;
+   const int SUBSEG_COUNT = 64;
+   const double STARTING_SEG_LEN = HALF_EARTH_CIRCUMFERENCE / STARTING_LINE_DIVISOR;
+
+   srand(0);
+   for (int i = 0; i < TEST_COUNT; i++) {
+      GeodeticCoord<double> p1, p2;
+
+      double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
+      p1.lat = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
+      p1.lon = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
+      p1.alt = ((double)rand() / (double)RAND_MAX) * 100000.0;
+
+      rhumb.Direct(p1.lat, p1.lon, dir, STARTING_SEG_LEN, p2.lat, p2.lon);
+      p2.alt = p1.alt;
+
+      double max_err = 0;
+
+      float dlat = (float)p2.lat - (float)p1.lat;
+      float dlon = (float)p2.lon - (float)p1.lon;
+      if (dlon > 180.0f) {
+         dlon -= 360.0f;
+      }
+      if (dlon < -180.0f) {
+         dlon += 360.0f;
+      }
+      float dalt = (float)p2.alt - (float)p1.alt;
+      for (int j = 0; j <= SUBSEG_COUNT; j++) {
+         GeodeticCoord<float> interp_f;
+         float frac_f = (float)j / (float)SUBSEG_COUNT;
+         interp_f.lat = (float)p1.lat + frac_f * dlat;
+         interp_f.lon = (float)p1.lon + frac_f * dlon;
+         interp_f.alt = (float)p1.alt + frac_f * dalt;
+
+         GeodeticCoord<double> interp_d;
+         float frac_d = (double)j / (double)SUBSEG_COUNT;
+         rhumb.Direct(p1.lat, p1.lon, dir, frac_d * STARTING_SEG_LEN, interp_d.lat, interp_d.lon);
+         interp_d.alt = p1.alt + ((double)j / (double)SUBSEG_COUNT) * dalt;
+
+         GeocentricCoord<float> xyz_f = geoToXYZ(interp_f.lat, interp_f.lon, interp_f.alt);
+
+         GeocentricCoord<double> xyz_d;
+         earth.Forward(interp_d.lat, interp_d.lon, interp_d.alt, xyz_d.x, xyz_d.y, xyz_d.z);
+
+         GeocentricCoord<double> xyz_f_as_d = { xyz_f.x, xyz_f.y, xyz_f.z };
+
+         double err = length(xyz_f_as_d - xyz_d);
+         max_err = std::max(max_err, err);
+      }
+
+      printf("err for (%7.3f, %8.3f)->(%7.3f, %8.3f): %8.3f\n",
+         p1.lat, p1.lon, p2.lat, p2.lon, max_err);
+   }
+}
+
 int _tmain(int argc, _TCHAR* argv[]) {
     double lat1 = 0;
     double lon1 = 0;
@@ -695,6 +835,8 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	testArcTemplateMethod();
 
 	//testGeodMidpointToStraightLineMidpointError();
+
+   //testRhumbLineAsFloatError();
 
 	return 0;
 }
