@@ -13,6 +13,13 @@
 
 using namespace GeographicLib;
 
+#define WGS84_R2_METERS 6371007.1809   // radius of sphere of equal area
+
+template<typename T>
+T metersToRad(T meters) {
+   return (T)meters *  ((T)1.0 / (T)WGS84_R2_METERS);
+}
+
 template<typename T>
 struct GeodeticCoord {
     T lat, lon, alt;
@@ -110,6 +117,58 @@ GeocentricCoord<T> cross(GeocentricCoord<T> v1, GeocentricCoord<T> v2) {
 		v1.x * v2.y - v1.y * v2.x
 	};
 	return cross;
+}
+
+template<typename T>
+void calcRhumbLineDirectFvMethod(
+   T lat1, T lon1,
+   T distance, T heading,
+   T& lat2, T& lon2)
+{
+   T rad_lat1, rad_lon1;
+   T rad_lat2, rad_lon2;
+   T rad_distance;
+   T rad_heading;
+   T dY, dX, q;
+
+   // Fudge the starting point at the poles.
+   lat1 = std::min(lat1, (T)89.999999);
+   lat1 = std::max(lat1, (T)-89.999999);
+
+   // convert point 1 to radians
+   rad_lat1 = lat1 * (T)Math::degree();
+   rad_lon1 = lon1 * (T)Math::degree();
+
+   // input is in meters and degrees
+   rad_distance = metersToRad(distance);
+   rad_heading = heading * (T)Math::degree();
+
+   // compute ending latitude
+   rad_lat2 = rad_lat1 + rad_distance * cos(rad_heading);
+
+   // Compute dY in a mercator projection with a scale factor of 
+   // 1 / WGS84_R2_METERS.
+   dY = log(tan(rad_lat2 / 2 + (T)Math::pi() / 4) / tan(rad_lat1 / 2 + (T)Math::pi() / 4));
+
+   // Compute the inverse of the mercator projection stretching factor.
+   if (fabs(rad_lat2 - rad_lat1) < sqrt(1.0e-15))
+      q = cos(rad_lat1);
+   else
+      q = (rad_lat2 - rad_lat1) / dY;
+
+   // Compute dX in a mercator projection with a scale factor of 
+   // 1 / WGS84_R2_METERS.
+   dX = rad_distance * sin(rad_heading) / q;
+
+   // Compute ending longitude.  Must handle IDL crossing.
+   rad_lon2 = rad_lon1 + dX;
+   if (rad_lon2 > (T)Math::pi())
+      rad_lon2 -= (T)Math::pi() * (T)2;
+   else if (rad_lon2 < (T)-Math::pi())
+      rad_lon2 += (T)Math::pi() * (T)2;
+
+   lat2 = rad_lat2 / (T)Math::degree();
+   lon2 = rad_lon2 / (T)Math::degree();
 }
 
 template<typename T>
@@ -754,13 +813,21 @@ void testGeodMidpointToStraightLineMidpointError() {
 
 void testRhumbLineAsFloatError()
 {
-   const int TEST_COUNT = 25;
+   const int TEST_COUNT = 100000;
    const int STARTING_LINE_DIVISOR = 64;
    const int SUBSEG_COUNT = 64;
    const double STARTING_SEG_LEN = HALF_EARTH_CIRCUMFERENCE / STARTING_LINE_DIVISOR;
 
+   double max_err_fv_method_from_f = 0;
+   double max_err_fv_method_from_d = 0;
+
    srand(0);
    for (int i = 0; i < TEST_COUNT; i++) {
+
+      if ((i + 1) % 100 == 0) {
+         printf("\r%d tests done...", i + 1);
+      }
+
       GeodeticCoord<double> p1, p2;
 
       double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
@@ -771,7 +838,8 @@ void testRhumbLineAsFloatError()
       rhumb.Direct(p1.lat, p1.lon, dir, STARTING_SEG_LEN, p2.lat, p2.lon);
       p2.alt = p1.alt;
 
-      double max_err = 0;
+      double max_err_fv_method_from_f_inner = 0;
+      double max_err_fv_method_from_d_inner = 0;
 
       float dlat = (float)p2.lat - (float)p1.lat;
       float dlon = (float)p2.lon - (float)p1.lon;
@@ -785,29 +853,56 @@ void testRhumbLineAsFloatError()
       for (int j = 0; j <= SUBSEG_COUNT; j++) {
          GeodeticCoord<float> interp_f;
          float frac_f = (float)j / (float)SUBSEG_COUNT;
-         interp_f.lat = (float)p1.lat + frac_f * dlat;
-         interp_f.lon = (float)p1.lon + frac_f * dlon;
+         float interp_dist_f = frac_f * (float)STARTING_SEG_LEN;
+
+         calcRhumbLineDirectFvMethod(
+            (float)p1.lat, (float)p1.lon, interp_dist_f, (float)dir,
+            interp_f.lat, interp_f.lon);
          interp_f.alt = (float)p1.alt + frac_f * dalt;
 
+         double frac_d = (double)j / (double)SUBSEG_COUNT;
+         double interp_dist_d = frac_d * STARTING_SEG_LEN;
+
          GeodeticCoord<double> interp_d;
-         float frac_d = (double)j / (double)SUBSEG_COUNT;
-         rhumb.Direct(p1.lat, p1.lon, dir, frac_d * STARTING_SEG_LEN, interp_d.lat, interp_d.lon);
-         interp_d.alt = p1.alt + ((double)j / (double)SUBSEG_COUNT) * dalt;
+         calcRhumbLineDirectFvMethod(
+            p1.lat, p1.lon, interp_dist_d, dir,
+            interp_d.lat, interp_d.lon);
+         interp_d.alt = p1.alt + frac_d * dalt;
+
+         GeodeticCoord<double> interp_d_ref;
+         rhumb.Direct(p1.lat, p1.lon, dir, interp_dist_d, interp_d_ref.lat, interp_d_ref.lon);
+         interp_d_ref.alt = p1.alt + frac_d * dalt;
 
          GeocentricCoord<float> xyz_f = geoToXYZ(interp_f.lat, interp_f.lon, interp_f.alt);
+         GeocentricCoord<double> xyz_d = geoToXYZ(interp_d.lat, interp_d.lon, interp_d.alt);
 
-         GeocentricCoord<double> xyz_d;
-         earth.Forward(interp_d.lat, interp_d.lon, interp_d.alt, xyz_d.x, xyz_d.y, xyz_d.z);
+         GeocentricCoord<double> xyz_d_ref;
+         earth.Forward(
+            interp_d_ref.lat, interp_d_ref.lon, interp_d_ref.alt,
+            xyz_d_ref.x, xyz_d_ref.y, xyz_d_ref.z);
 
          GeocentricCoord<double> xyz_f_as_d = { xyz_f.x, xyz_f.y, xyz_f.z };
 
-         double err = length(xyz_f_as_d - xyz_d);
-         max_err = std::max(max_err, err);
+         double err_fv_method_from_f = length(xyz_f_as_d - xyz_d_ref);
+         double err_fv_method_from_d = length(xyz_d - xyz_d_ref);
+         max_err_fv_method_from_f_inner =
+            std::max(max_err_fv_method_from_f_inner, err_fv_method_from_f);
+         max_err_fv_method_from_d_inner =
+            std::max(max_err_fv_method_from_d_inner, err_fv_method_from_d);
       }
 
-      printf("err for (%7.3f, %8.3f)->(%7.3f, %8.3f): %8.3f\n",
-         p1.lat, p1.lon, p2.lat, p2.lon, max_err);
+      max_err_fv_method_from_f =
+         std::max(max_err_fv_method_from_f_inner, max_err_fv_method_from_f_inner);
+      max_err_fv_method_from_d =
+         std::max(max_err_fv_method_from_d_inner, max_err_fv_method_from_d_inner);
+
+      //printf("err for (%7.3f, %8.3f)->(%7.3f, %8.3f): %8.3f / %8.3f\n",
+      //   p1.lat, p1.lon, p2.lat, p2.lon,
+      //   max_err_fv_method_from_f_inner, max_err_fv_method_from_d_inner);
    }
+
+   printf("\nmax err from FV method over %d tests (float/double): %8.3f / %8.3f\n",
+      TEST_COUNT, max_err_fv_method_from_f, max_err_fv_method_from_d);
 }
 
 int _tmain(int argc, _TCHAR* argv[]) {
@@ -832,11 +927,11 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
 
 
-	testArcTemplateMethod();
+	//testArcTemplateMethod();
 
 	//testGeodMidpointToStraightLineMidpointError();
 
-   //testRhumbLineAsFloatError();
+   testRhumbLineAsFloatError();
 
 	return 0;
 }
