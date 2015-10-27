@@ -910,8 +910,40 @@ void testRhumbLineAsFloatError()
         //    max_err_fv_method_from_f_inner, max_err_fv_method_from_d_inner);
     }
 
-    printf("\nmax err from FV method over %d tests (float/double): %8.3f / %8.3f\n",
+    printf("\nmax err from FV method over %d tests (float/double): %8.3f m / %8.3f m\n",
         TEST_COUNT, max_err_fv_method_from_f, max_err_fv_method_from_d);
+}
+
+void testGeoToXYZFloatVsDouble() {
+    const int TEST_COUNT = 100000;
+
+    double max_err = 0;
+
+    srand(0);
+    for (int i = 0; i < TEST_COUNT; i++) {
+
+        GeodeticCoord<double> p1_d;
+        p1_d.lat = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
+        p1_d.lon = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
+        p1_d.alt = ((double)rand() / (double)RAND_MAX) * 100000.0;
+
+        GeodeticCoord<float> p1_f = {
+            (float)p1_d.lat, (float)p1_d.lon, (float)p1_d.alt
+        };
+
+        GeocentricCoord<float> xyz_f = geoToXYZ(p1_f.lat, p1_f.lon, p1_f.alt);
+        GeocentricCoord<double> xyz_d = geoToXYZ(p1_d.lat, p1_d.lon, p1_d.alt);
+
+        GeocentricCoord<double> xyz_f_as_d = {
+            xyz_f.x, xyz_f.y, xyz_f.z
+        };
+
+        double err = length(xyz_d - xyz_f_as_d);
+        max_err = std::max(max_err, err);
+        //printf("err: %f\n", err);
+    }
+
+    printf("max err over %d tests: %f m\n", TEST_COUNT, max_err);
 }
 
 int _tmain(int argc, _TCHAR* argv[]) {
@@ -936,11 +968,13 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
 
 
-    testArcTemplateMethod();
+    //testArcTemplateMethod();
 
     //testGeodMidpointToStraightLineMidpointError();
 
    //testRhumbLineAsFloatError();
+
+    testGeoToXYZFloatVsDouble();
 
     return 0;
 }
