@@ -4,3 +4,5 @@ ipch/
 *.sdf
 *.opensdf
 *.suo
+
+.editorconfig
