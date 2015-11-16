@@ -100,13 +100,11 @@ struct Mat3x3 {
 	}
 };
 
-const double a = Constants::WGS84_a();
-const double f = Constants::WGS84_f();
-const double b = (1.0 - f) * a;
-const Geodesic geods(a, f);
-const Rhumb rhumb(a, f);
-const Geocentric earth(a, f);
-const double EARTH_CIRCUMFERENCE = 2.0 * GeographicLib::Math::pi() * a;
+//const double b = (1.0 - Constants::WGS84_f()) * Constants::WGS84_a();
+const Geodesic geods(Constants::WGS84_a(), Constants::WGS84_f());
+const Rhumb rhumb(Constants::WGS84_a(), Constants::WGS84_f());
+const Geocentric earth(Constants::WGS84_a(), Constants::WGS84_f());
+const double EARTH_CIRCUMFERENCE = 2.0 * GeographicLib::Math::pi() * Constants::WGS84_a();
 const double HALF_EARTH_CIRCUMFERENCE = EARTH_CIRCUMFERENCE * 0.5;
 
 template<typename T>
@@ -143,6 +141,11 @@ GeocentricCoord<T> cross(GeocentricCoord<T> v1, GeocentricCoord<T> v2) {
 }
 
 template<typename T>
+T dot(GeocentricCoord<T> v1, GeocentricCoord<T> v2) {
+    return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+}
+
+template<typename T>
 void calcRhumbLineDirectFvMethod(
     T lat1, T lon1,
     T distance, T heading,
@@ -153,6 +156,10 @@ void calcRhumbLineDirectFvMethod(
     T rad_distance;
     T rad_heading;
     T dY, dX, q;
+
+    // this function was made for 0-degrees-north, but all the other code in this file
+    // was 0-degrees-east, so just correct that here.
+    heading = (T)90 - heading;
 
     // Fudge the starting point at the poles.
     lat1 = std::min(lat1, (T)89.999999);
@@ -221,6 +228,48 @@ GeocentricCoord<T> geoToXYZ(T lat, T lon, T alt)
     result.z = ((n * e) + alt) * sinlat;
 
     return result;
+}
+
+template<typename T>
+void xyzToGeo(T x, T y, T z, T& lat, T& lon, T& alt)
+{
+    T tlat, tlon, tf, tf2, tf3;
+    T f, e, a, u, p, r;
+    T sinu, cosu;
+
+    T sinlat, coslat;
+
+    a = (T)6378137.0; // WGS84 meters at equator
+    f = (T)1.0 / (T)298.257223563;  // flattening
+    e = ((T)2.0 * f) - (f * f);  // eccentricity squared
+    p = sqrt((x * x) + (y * y));
+    r = sqrt((p * p) + (z * z));
+    u = (z / p) * (((T)1.0 - f) + (e * (a / r)));
+    u = atan(u);
+    sinu = sin(u);
+    cosu = cos(u);
+
+    tf = (z * ((T)1.0 - f)) + (e * a * sinu * sinu * sinu);
+    tf2 = ((T)1.0 - f) * (p - (e * a * cosu * cosu * cosu));
+    tf3 = tf / tf2;
+    tf3 = atan(tf3);
+
+    tlat = tf3;
+    tlon = atan(y / x);
+
+    coslat = cos(tlat);
+    sinlat = sin(tlat);
+    tf = (p * coslat) + (z * sinlat) - (a * sqrt((T)1.0 - (e * sinlat * sinlat)));
+    alt = tf;
+
+    lat = tlat / (T)Math::degree();
+    lon = tlon / (T)Math::degree();
+
+    // correct lon if needed
+    if (x < 0)
+        lon += 180.0;
+    if (lon > 180.0)
+        lon -= 360.0;
 }
 
 template<typename T>
@@ -508,66 +557,70 @@ void generateRhumbTemplate(
 }
 
 template<typename T>
-Mat3x3<T> getRhumbTemplateMatrix(GeocentricCoord<T> p1, T heading, T subseg_angle) {
+Mat3x3<T> getRhumbTemplateMatrix1(
+    GeocentricCoord<T> p1, T heading, T subseg_angle,
+    Mat3x3<T>& r1, Mat3x3<T>& r2, Mat3x3<T>& r1T,
+    GeocentricCoord<T>& v1) {
 
-	heading *= (T)Math::degree();
-	if (heading > (T)Math::pi()) {
-		heading -= (T)2.0 * (T)Math::pi();
-	}
+    heading *= (T)Math::degree();
+    if (heading > (T)Math::pi()) {
+        heading -= (T)2.0 * (T)Math::pi();
+    }
 
-	// v1 = (0, 0, 1), rotated about x-axis by azimuth @ p1, rotated about z-axis to p1's plane
+    auto p1_nrm = normalize(p1);
 
-	GeocentricCoord<T> v1;
-	v1.x = 0;
-	v1.y = heading >= 0 ? (T)1 : (T)-1;
-	v1.y *= -sin(heading);
-	v1.z = heading >= 0 ? (T)1 : (T)-1;
-	v1.z *= cos(heading);
+    auto dx1 = length(p1.x, p1.y, (T)0);
+    auto dy1 = p1.z;
+    T lat_in_rad = atan2(dy1, dx1);
 
-	T angle_to_p1_plane = atan2(p1.y, p1.x);
-	v1.x = v1.y * sin(angle_to_p1_plane);
-	v1.y *= cos(angle_to_p1_plane);
+    // adjust subseg_angle by latitude
+    //auto ratio = (T)1 / cos(lat_in_rad);
+    //subseg_angle *= ratio;
 
-	// m1a = rot matrix to move v1 to z-axis
-	GeocentricCoord<T> n;
-	if (v1.x <= v1.y && v1.x <= v1.z) {
-		n = { 1, 0, 0 };
-	}
-	else if (v1.y <= v1.x && v1.y <= v1.z) {
-		n = { 0, 1, 0 };
-	}
-	else {
-		n = { 0, 0, 1 };
-	}
-	GeocentricCoord<T> a = v1;
-	GeocentricCoord<T> b = normalize(cross(a, n));
-	GeocentricCoord<T> c = cross(a, b);
-	Mat3x3<T> m1a = {
-		a.x, a.y, a.z,
-		b.x, b.y, b.z,
-		c.x, c.y, c.z
-	};
-	// m1b = rot matrix around z-axis by angle to transcribe subseg about equator
-	T angle = subseg_angle;
-	//Mat3x3<T> rot = {
-	//	cos(angle), -sin(angle), 0,
-	//	sin(angle), cos(angle), 0,
-	//	0, 0, 1
-	//};
-	Mat3x3<T> rot = {
-		1, 0, 0,
-		0, cos(angle), -sin(angle),
-		0, sin(angle), cos(angle)
-	};
-	// m1 = m1a * m1b * m1aT
-	Mat3x3<T> m1a_trans = {
-		a.x, b.x, c.x,
-		a.y, b.y, c.y,
-		a.z, b.z, c.z
-	};
+    // start with v1 = (0, 0, 1), rotated about x-axis by azimuth @ p1,
+    // and rotated about z-axis by the same amount that p1 plane is rotated
+    // away from the xz plane
 
-	Mat3x3<T> m1 = m1a_trans * rot * m1a;
-	return m1;
+    //T cos_heading = cos(heading);
+    ////T cos_heading_sq = cos_heading * cos_heading;
+    //T right_side = (T)1 - cos_heading;
+    //right_side = pow(right_side, 10);
+    //T left_side = (T)1 - right_side;
+    //heading *= cos(lat_in_rad) * left_side + right_side;
+    ////heading *= cos(lat_in_rad) * cos_heading_sq + ((T)1 - cos_heading_sq);
+    ////heading *= cos(lat_in_rad);
+
+    T frac = (T)1 / (T)5;
+    T right_side = pow(frac * ((T)1 / ((T)1 - (heading - (frac + ((T)Math::pi() * (T)0.5 - (T)1))))), 5);
+    T left_side = (T)1 - right_side;
+    heading *= cos(lat_in_rad) * left_side + right_side;
+
+    v1.x = 0;
+    v1.y = heading >= 0 ? (T)1 : (T)-1;
+    v1.y *= -sin(heading);
+    v1.z = heading >= 0 ? (T)1 : (T)-1;
+    v1.z *= cos(heading);
+
+    T angle_from_xy_plane_to_p1_plane = atan2(p1.y, p1.x);
+    T v1_rot_angle = angle_from_xy_plane_to_p1_plane;
+    GeocentricCoord<T> temp = v1;
+    v1.x = temp.x * cos(v1_rot_angle) - temp.y * sin(v1_rot_angle);
+    v1.y = temp.x * sin(v1_rot_angle) + temp.y * cos(v1_rot_angle);
+
+    auto v1_dot_p1_nrm = dot(v1, p1_nrm);
+    subseg_angle = subseg_angle / sqrt((T)1 - v1_dot_p1_nrm * v1_dot_p1_nrm);
+
+    T s = sin(subseg_angle);
+    T c = cos(subseg_angle);
+    T oc = 1.0f - c;
+
+    Mat3x3<T> m = {
+        oc * v1.x * v1.x + c,        oc * v1.x * v1.y - v1.z * s, oc * v1.z * v1.x + v1.y * s,
+        oc * v1.x * v1.y + v1.z * s, oc * v1.y * v1.y + c,        oc * v1.y * v1.z - v1.x * s,
+        oc * v1.z * v1.x - v1.y * s, oc * v1.y * v1.z + v1.x * s, oc * v1.z * v1.z + c,
+    };
+
+    return m;
 }
 
 template<typename T>
@@ -1487,11 +1540,14 @@ void testRhumbTemplate1(
 	GeodeticCoord<double> coord1, GeodeticCoord<double> coord2,
 	double seg_dist, double seg_dir, float subseg_anglular_len,
 	unsigned int subseg_count, bool apply_offset,
-	double& max_error_via_f_rhumb) {
+	double& max_error_via_f_rhumb,
+    FILE* actual_points, FILE* approx_points,
+    FILE* approx_offset_points, FILE* axis_points) {
 
-	printf("(%7.02f, %7.02f, %d) -> (%7.02f, %7.02f, %d)\n",
+	printf("(%7.02f, %7.02f, %d) -> (%7.02f, %7.02f, %d) @ %.02f deg\n",
 	    coord1.lat, coord1.lon, (int)coord1.alt,
-	    coord2.lat, coord2.lon, (int)coord2.alt);
+	    coord2.lat, coord2.lon, (int)coord2.alt,
+        seg_dir);
 
 	GeocentricCoord<double> geocentric_start_d, geocentric_end_d;
 	earth.Forward(coord1.lat, coord1.lon, coord1.alt,
@@ -1510,53 +1566,100 @@ void testRhumbTemplate1(
 	float start_len_f = length(geocentric_start_f);
 	float end_len_f = length(geocentric_end_f);
 
-	auto tempalte_matrix = getRhumbTemplateMatrix(
-		geocentric_start_f, (float)seg_dir, subseg_anglular_len);
+	Mat3x3<float> r1, r2, r1T;
+    GeocentricCoord<float> rot_axis;
+	auto template_matrix = getRhumbTemplateMatrix1(
+		geocentric_start_f, (float)seg_dir, subseg_anglular_len,
+        r1, r2, r1T, rot_axis);
 
-	Mat3x3<float> template_to_seg_f = getTemplateToSegMatrix(
-		geocentric_start_f, geocentric_end_f,
-		normalize(geocentric_start_f));
+    char buf[256];
 
+    auto writeToFileF = [&](const GeocentricCoord<float>& p, FILE* fp) {
+        sprintf(buf, "%f,%f,%f\n", p.x, p.y, p.z);
+        fwrite(buf, strlen(buf), 1, fp);
+    };
+
+    auto writeToFileD = [&](const GeocentricCoord<double>& p, FILE* fp) {
+        sprintf(buf, "%f,%f,%f\n", p.x, p.y, p.z);
+        fwrite(buf, strlen(buf), 1, fp);
+    };
+
+    fwrite("\n", 1, 1, actual_points);
+    fwrite("\n", 1, 1, approx_points);
+    fwrite("\n", 1, 1, approx_offset_points);
+    fwrite("\n", 1, 1, axis_points);
+
+    //GeocentricCoord<float> rot_axis1 = rot_axis * 100000;
+    //writeToFileF(geocentric_start_f, axis_points);
+    //writeToFileF(geocentric_start_f + rot_axis1, axis_points);
+    GeocentricCoord<float> rot_axis1 = rot_axis * 6500000;
+    writeToFileF(GeocentricCoord<float>{0, 0, 0}, axis_points);
+    writeToFileF(rot_axis1, axis_points);
+
+    // generate derived points
 	std::vector<GeocentricCoord<float>> derived_points_f;
-	GeocentricCoord<float> last_normalized_point = normalize(geocentric_start_f);
-	derived_points_f.push_back(geocentric_start_f);
-	for (unsigned int i = 0; i < subseg_count; i++) {
+    
+    GeocentricCoord<float> last_normalized_point = normalize(geocentric_start_f);
+    //auto start_point2 = geocentric_start_f;
+    //start_point2.z = 0;
+    //GeocentricCoord<float> last_normalized_point = normalize(start_point2);
+    //float start_len2_f = length(start_point2);
+    //float end_len2_f = length(geocentric_end_f - GeocentricCoord<float>{ 0, 0, geocentric_start_f.z});
+
+    derived_points_f.push_back(geocentric_start_f);
+    writeToFileF(derived_points_f.back(), approx_points);
+    for (unsigned int i = 0; i < subseg_count; i++) {
 		float interp_frac_f = (float)(i + 1) / (float)subseg_count;
 
-		float new_point_len = start_len_f * (1.0f - interp_frac_f) + end_len_f * interp_frac_f;
+        float new_point_len = start_len_f * (1.0f - interp_frac_f) + end_len_f * interp_frac_f;
+        //float new_point_len = start_len2_f * (1.0f - interp_frac_f) + end_len2_f * interp_frac_f;
 
-		auto next_normalized_coord = tempalte_matrix * last_normalized_point;
-		derived_points_f.push_back(next_normalized_coord * new_point_len);
-		last_normalized_point = next_normalized_coord;
+        auto next_normalized_coord = template_matrix * last_normalized_point;
+        derived_points_f.push_back(next_normalized_coord * new_point_len);
+        auto& new_coord = derived_points_f.back();
+        //new_coord.z += geocentric_start_f.z;
+        writeToFileF(new_coord, approx_points);
+        last_normalized_point = next_normalized_coord;
+
+		double lat, lon, alt;
+		earth.Reverse(new_coord.x, new_coord.y, new_coord.z, lat, lon, alt);
+		int a = 0;
 	}
 
+    // generate real points
 	std::vector<GeocentricCoord<double>> real_points;
 	real_points.push_back(geocentric_start_d);
-	for (unsigned int i = 0; i < subseg_count - 1; i++) {
+    writeToFileD(real_points.back(), actual_points);
+    for (unsigned int i = 0; i < subseg_count - 1; i++) {
 		double interp_frac_d = (double)(i + 1) / (double)subseg_count;
 		
 		double lat, lon;
 		double dist = seg_dist * interp_frac_d;
-		rhumb.Direct(coord1.lat, coord1.lon, seg_dir, dist, lat, lon);
+		rhumb.Direct(coord1.lat, coord1.lon, 90.0 - seg_dir, dist, lat, lon);
 
 		double alt = coord1.alt * (1.0f - interp_frac_d) + coord2.alt * interp_frac_d;
 
 		GeocentricCoord<double> p;
 		earth.Forward(lat, lon, alt, p.x, p.y, p.z);
 		real_points.push_back(p);
-	}
+        writeToFileD(real_points.back(), actual_points);
+    }
 	real_points.push_back(geocentric_end_d);
+    writeToFileD(real_points.back(), actual_points);
 
+    // apply the offset
 	if (apply_offset) {
 		GeocentricCoord<float> end_offset_f = geocentric_end_f - derived_points_f.back();
 		for (unsigned int i = 0; i < derived_points_f.size(); i++) {
 			float interp_frac_f = (float)i / (float)(derived_points_f.size() - 1);
 			derived_points_f[i] = derived_points_f[i] + (end_offset_f * interp_frac_f);
-		}
+            writeToFileF(derived_points_f[i], approx_offset_points);
+        }
 	}
 
 	max_error_via_f_rhumb = 0;
 
+    // find the error
 	for (unsigned int i = 0; i < derived_points_f.size(); i++) {
 		GeocentricCoord<double> derived_point_f_as_d;
 		derived_point_f_as_d.x = derived_points_f[i].x;
@@ -1571,6 +1674,136 @@ void testRhumbTemplate1(
 	}
 
 	//printf("max err: %.3f\n", max_error_via_f_gc);
+}
+
+void testRhumbFromFvDirect(
+    GeodeticCoord<double> coord1, GeodeticCoord<double> coord2,
+    double seg_dist, double seg_dir, float subseg_anglular_len,
+    unsigned int subseg_count, bool apply_offset,
+    double& max_error_via_f_rhumb,
+    FILE* actual_points, FILE* approx_points,
+    FILE* approx_offset_points, FILE* axis_points) {
+
+    printf("(%7.02f, %7.02f, %d) -> (%7.02f, %7.02f, %d) @ %.02f deg\n",
+        coord1.lat, coord1.lon, (int)coord1.alt,
+        coord2.lat, coord2.lon, (int)coord2.alt,
+        seg_dir);
+
+    GeocentricCoord<double> geocentric_start_d, geocentric_end_d;
+    earth.Forward(coord1.lat, coord1.lon, coord1.alt,
+        geocentric_start_d.x, geocentric_start_d.y, geocentric_start_d.z);
+    earth.Forward(coord2.lat, coord2.lon, coord2.alt,
+        geocentric_end_d.x, geocentric_end_d.y, geocentric_end_d.z);
+
+    GeocentricCoord<float> geocentric_start_f, geocentric_end_f;
+    geocentric_start_f.x = (float)geocentric_start_d.x;
+    geocentric_start_f.y = (float)geocentric_start_d.y;
+    geocentric_start_f.z = (float)geocentric_start_d.z;
+    geocentric_end_f.x = (float)geocentric_end_d.x;
+    geocentric_end_f.y = (float)geocentric_end_d.y;
+    geocentric_end_f.z = (float)geocentric_end_d.z;
+
+    float start_len_f = length(geocentric_start_f);
+    float end_len_f = length(geocentric_end_f);
+
+    //Mat3x3<float> r1, r2, r1T;
+    //GeocentricCoord<float> rot_axis;
+    //auto tempalte_matrix = getRhumbTemplateMatrix1(
+    //    geocentric_start_f, (float)seg_dir, subseg_anglular_len,
+    //    r1, r2, r1T, rot_axis);
+
+    char buf[256];
+
+    auto writeToFileF = [&](const GeocentricCoord<float>& p, FILE* fp) {
+        sprintf(buf, "%f,%f,%f\n", p.x, p.y, p.z);
+        fwrite(buf, strlen(buf), 1, fp);
+    };
+
+    auto writeToFileD = [&](const GeocentricCoord<double>& p, FILE* fp) {
+        sprintf(buf, "%f,%f,%f\n", p.x, p.y, p.z);
+        fwrite(buf, strlen(buf), 1, fp);
+    };
+
+    fwrite("\n", 1, 1, actual_points);
+    fwrite("\n", 1, 1, approx_points);
+    fwrite("\n", 1, 1, approx_offset_points);
+    fwrite("\n", 1, 1, axis_points);
+
+    //GeocentricCoord<float> rot_axis1 = rot_axis * 6500000;
+    //writeToFileF(GeocentricCoord<float>{0, 0, 0}, axis_points);
+    //writeToFileF(rot_axis1, axis_points);
+
+    // generate derived points
+    std::vector<GeocentricCoord<float>> derived_points_f;
+
+    derived_points_f.push_back(geocentric_start_f);
+    writeToFileF(derived_points_f.back(), approx_points);
+    float dalt = (float)coord2.alt - (float)coord1.alt;
+    for (unsigned int i = 0; i < subseg_count; i++) {
+        float interp_frac_f = (float)(i + 1) / (float)subseg_count;
+
+        float interp_dist_f = interp_frac_f * (float)seg_dist;
+        GeodeticCoord<float> interp_f;
+        calcRhumbLineDirectFvMethod(
+            (float)coord1.lat, (float)coord1.lon, interp_dist_f, (float)seg_dir,
+            interp_f.lat, interp_f.lon);
+        interp_f.alt = (float)coord1.alt + interp_frac_f * dalt;
+
+        auto derived_coord = geoToXYZ(interp_f.lat, interp_f.lon, interp_f.alt);
+
+        derived_points_f.push_back(derived_coord);
+        auto& new_coord = derived_points_f.back();
+        writeToFileF(new_coord, approx_points);
+    }
+
+    // generate real points
+    std::vector<GeocentricCoord<double>> real_points;
+    real_points.push_back(geocentric_start_d);
+    writeToFileD(real_points.back(), actual_points);
+    for (unsigned int i = 0; i < subseg_count - 1; i++) {
+        double interp_frac_d = (double)(i + 1) / (double)subseg_count;
+
+        double lat, lon;
+        double dist = seg_dist * interp_frac_d;
+        rhumb.Direct(coord1.lat, coord1.lon, 90.0 - seg_dir, dist, lat, lon);
+
+        double alt = coord1.alt * (1.0f - interp_frac_d) + coord2.alt * interp_frac_d;
+
+        GeocentricCoord<double> p;
+        earth.Forward(lat, lon, alt, p.x, p.y, p.z);
+        real_points.push_back(p);
+        writeToFileD(real_points.back(), actual_points);
+    }
+    real_points.push_back(geocentric_end_d);
+    writeToFileD(real_points.back(), actual_points);
+
+    // apply the offset
+    if (apply_offset) {
+        GeocentricCoord<float> end_offset_f = geocentric_end_f - derived_points_f.back();
+        for (unsigned int i = 0; i < derived_points_f.size(); i++) {
+            float interp_frac_f = (float)i / (float)(derived_points_f.size() - 1);
+            derived_points_f[i] = derived_points_f[i] + (end_offset_f * interp_frac_f);
+            writeToFileF(derived_points_f[i], approx_offset_points);
+        }
+    }
+
+    max_error_via_f_rhumb = 0;
+
+    // find the error
+    for (unsigned int i = 0; i < derived_points_f.size(); i++) {
+        GeocentricCoord<double> derived_point_f_as_d;
+        derived_point_f_as_d.x = derived_points_f[i].x;
+        derived_point_f_as_d.y = derived_points_f[i].y;
+        derived_point_f_as_d.z = derived_points_f[i].z;
+
+        double error = length(derived_point_f_as_d - real_points[i]);
+
+        printf("err: %f\n", error);
+
+        max_error_via_f_rhumb = std::max(max_error_via_f_rhumb, error);
+    }
+
+    //printf("max err: %.3f\n", max_error_via_f_gc);
 }
 
 void doTestRhumbApprox1(int divisor_pair_idx, bool apply_offset) {
@@ -1598,19 +1831,37 @@ void doTestRhumbApprox1(int divisor_pair_idx, bool apply_offset) {
 	double max_error_via_d_rhumb = 0;
 	double max_midpoint_error_d_rhumb = 0;
 
+    FILE* actual_points = fopen("actual_points.txt", "w");
+    FILE* approx_points = fopen("approx_points.txt", "w");
+    FILE* approx_offset_points = fopen("approx_offset_points.txt", "w");
+    FILE* axis_points = fopen("axis_points.txt", "w");
+
 	srand(0);
-	for (int i = 0; i < TEST_COUNT; i++) {
+    for (int i = 0; i < TEST_COUNT; i++) {
+    //for (int i = 0; i < 7; i++) {
 
 		if (((i + 1) % 1000) == 0) {
 			printf("test count: %d\r", i + 1);
 		}
 
-		double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
-		double lat1 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
+        //double dir = 15.0 * i;
+        //double lat1 = 88.68;
+        //double lon1 = -65;
+
+		double dir = ((double)rand() / (double)RAND_MAX) * 90.0;
+		double lat1 = ((double)rand() / (double)RAND_MAX) * 90.0;
 		double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
 
+        //double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
+		//double lat1 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
+		//double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
+
 		double lat2, lon2;
-		rhumb.Direct(lat1, lon1, dir, STARTING_SEG_LEN, lat2, lon2);
+		rhumb.Direct(lat1, lon1, 90.0 - dir, STARTING_SEG_LEN, lat2, lon2);
+		//rhumb.Direct(lat1, lon1, 0, STARTING_SEG_LEN, lat2, lon2);
+		//rhumb.Direct(lat1, lon1, 45, STARTING_SEG_LEN, lat2, lon2);
+		//rhumb.Direct(lat1, lon1, 90, STARTING_SEG_LEN, lat2, lon2);
+		//rhumb.Direct(lat1, lon1, -45, STARTING_SEG_LEN, lat2, lon2);
 
 		// rhumb lines that get sent over the poles are invalid -- redo
 		if (isnan(lon2)) {
@@ -1618,23 +1869,35 @@ void doTestRhumbApprox1(int divisor_pair_idx, bool apply_offset) {
 			continue;
 		}
 
-		double alt1 = ((double)rand() / (double)RAND_MAX) * 100000.0;
-		double alt2 = ((double)rand() / (double)RAND_MAX) * 100000.0;
+		//double alt1 = ((double)rand() / (double)RAND_MAX) * 100000.0;
+		//double alt2 = ((double)rand() / (double)RAND_MAX) * 100000.0;
+        double alt1 = 5000;
+        double alt2 = 5000;
 
 		double max_error_via_f_inner_rhumb = 0;
 		//double max_error_via_d_inner_rhumb = 0;
 		double max_midpoint_error_d_inner_rhumb = 0;
 
 		float subseg_anglular_len = (float)Math::pi() / (float)(STARTING_LINE_DIVISOR * SEG_DIVISOR);
-		testRhumbTemplate1(
-			{ lat1, lon1, alt1 }, { lat2, lon2, alt2 }, STARTING_SEG_LEN, dir,
-			subseg_anglular_len, SEG_DIVISOR, apply_offset,
-			max_error_via_f_inner_rhumb);
+        //if (i == 2 || 1)
+        //    testRhumbTemplate1(
+        //        { lat1, lon1, alt1 }, { lat2, lon2, alt2 }, STARTING_SEG_LEN, dir,
+        //        subseg_anglular_len, SEG_DIVISOR, apply_offset,
+        //        max_error_via_f_inner_rhumb, actual_points, approx_points, approx_offset_points, axis_points);
+        testRhumbFromFvDirect(
+            { lat1, lon1, alt1 }, { lat2, lon2, alt2 }, STARTING_SEG_LEN, dir,
+            subseg_anglular_len, SEG_DIVISOR, apply_offset,
+            max_error_via_f_inner_rhumb, actual_points, approx_points, approx_offset_points, axis_points);
 
 		max_error_via_f_rhumb = std::max(max_error_via_f_rhumb, max_error_via_f_inner_rhumb);
 		//max_error_via_d_rhumb = std::max(max_error_via_d_rhumb, max_error_via_d_inner_rhumb);
 		max_midpoint_error_d_rhumb = std::max(max_midpoint_error_d_rhumb, max_midpoint_error_d_inner_rhumb);
 	}
+
+    fclose(actual_points);
+    fclose(approx_points);
+    fclose(approx_offset_points);
+    fclose(axis_points);
 
 	float meters_per_pix = calcMetersPerPixForDist((float)SUBSEG_LEN);
 	float pix_err = (float)max_error_via_f_rhumb / meters_per_pix;
@@ -1655,7 +1918,7 @@ void testRhumbApprox1() {
 	//p1 = m * p1;
 	//p1 = m * p1;
 
-	doTestRhumbApprox1(3, true);
+    doTestRhumbApprox1(3, true);
 }
 
 int _tmain(int argc, _TCHAR* argv[]) {
