@@ -18,8 +18,8 @@ using namespace GeographicLib;
 // dist in meters
 // assume 1920 px / 20" wide screen == 96 dpi
 float calcMetersPerPixForDist(float dist) {
-	// return meters per pix @ 1km * the number of km distant you are
-	return (1000.0f / 960.0f) * (dist / 1000.0f);
+    // return meters per pix @ 1km * the number of km distant you are
+    return (1000.0f / 960.0f) * (dist / 1000.0f);
 }
 
 template<typename T>
@@ -83,21 +83,21 @@ struct Mat3x3 {
         });
     }
 
-	Mat3x3<T> operator*(const Mat3x3<T>& rhs) const {
-		return Mat3x3<T>({
-			m11 * rhs.m11 + m21 * rhs.m12 + m31 * rhs.m13,
-			m11 * rhs.m21 + m21 * rhs.m22 + m31 * rhs.m23,
-			m11 * rhs.m31 + m21 * rhs.m32 + m31 * rhs.m33,
+    Mat3x3<T> operator*(const Mat3x3<T>& rhs) const {
+        return Mat3x3<T>({
+            m11 * rhs.m11 + m21 * rhs.m12 + m31 * rhs.m13,
+            m11 * rhs.m21 + m21 * rhs.m22 + m31 * rhs.m23,
+            m11 * rhs.m31 + m21 * rhs.m32 + m31 * rhs.m33,
 
-			m12 * rhs.m11 + m22 * rhs.m12 + m32 * rhs.m13,
-			m12 * rhs.m21 + m22 * rhs.m22 + m32 * rhs.m23,
-			m12 * rhs.m31 + m22 * rhs.m32 + m32 * rhs.m33,
+            m12 * rhs.m11 + m22 * rhs.m12 + m32 * rhs.m13,
+            m12 * rhs.m21 + m22 * rhs.m22 + m32 * rhs.m23,
+            m12 * rhs.m31 + m22 * rhs.m32 + m32 * rhs.m33,
 
-			m13 * rhs.m11 + m23 * rhs.m12 + m33 * rhs.m13,
-			m13 * rhs.m21 + m23 * rhs.m22 + m33 * rhs.m23,
-			m13 * rhs.m31 + m23 * rhs.m32 + m33 * rhs.m33
-		});
-	}
+            m13 * rhs.m11 + m23 * rhs.m12 + m33 * rhs.m13,
+            m13 * rhs.m21 + m23 * rhs.m22 + m33 * rhs.m23,
+            m13 * rhs.m31 + m23 * rhs.m32 + m33 * rhs.m33
+        });
+    }
 };
 
 //const double b = (1.0 - Constants::WGS84_f()) * Constants::WGS84_a();
@@ -494,21 +494,21 @@ void check_coords(double lat1, double lon1, double lat2, double lon2) {
 }
 
 void testEllipsoidVsSphere1() {
-	double lat1 = 0;
-	double lon1 = 0;
-	double lat2 = 0;
-	double lon2 = 179.9;
-	check_coords(lat1, lon1, lat2, lon2);
+    double lat1 = 0;
+    double lon1 = 0;
+    double lat2 = 0;
+    double lon2 = 179.9;
+    check_coords(lat1, lon1, lat2, lon2);
 
-	srand(0);
-	for (int i = 0; i < 5; i++)
-	{
-		lat1 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
-		lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
-		lat2 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
-		lon2 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
-		check_coords(lat1, lon1, lat2, lon2);
-	}
+    srand(0);
+    for (int i = 0; i < 5; i++)
+    {
+        lat1 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
+        lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
+        lat2 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
+        lon2 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
+        check_coords(lat1, lon1, lat2, lon2);
+    }
 }
 
 template<typename T>
@@ -534,26 +534,26 @@ void generateArcTemplate(
 
 template<typename T>
 void generateRhumbTemplate(
-	int line_divisor, int seg_divisor, bool shift_to_origin,
-	std::vector<GeocentricCoord<T>>& arc_template) {
+    int line_divisor, int seg_divisor, bool shift_to_origin,
+    std::vector<GeocentricCoord<T>>& arc_template) {
 
-	// start with a 
+    // start with a 
 
 
-	GeocentricCoord<T> coord = { 0, 0, 0 };
-	arc_template.clear();
+    GeocentricCoord<T> coord = { 0, 0, 0 };
+    arc_template.clear();
 
-	const T ARC_LEN = (T)2.0 * (T)M_PI * (T)0.5 * ((T)1.0 / ((T)line_divisor * (T)seg_divisor));
-	for (int i = 0; i <= seg_divisor; i++) {
-		T angle = (T)i * ARC_LEN;
-		coord.x = cos(angle);
-		if (shift_to_origin) {
-			// subtract 1 to shift template so p1 is at origin
-			coord.x -= (T)1;
-		}
-		coord.y = sin(angle);
-		arc_template.push_back(coord);
-	}
+    const T ARC_LEN = (T)2.0 * (T)M_PI * (T)0.5 * ((T)1.0 / ((T)line_divisor * (T)seg_divisor));
+    for (int i = 0; i <= seg_divisor; i++) {
+        T angle = (T)i * ARC_LEN;
+        coord.x = cos(angle);
+        if (shift_to_origin) {
+            // subtract 1 to shift template so p1 is at origin
+            coord.x -= (T)1;
+        }
+        coord.y = sin(angle);
+        arc_template.push_back(coord);
+    }
 }
 
 template<typename T>
@@ -672,162 +672,162 @@ GeocentricCoord<T> getCoordFromTemplate2(
 }
 
 void testArcTemplate3(
-	GeodeticCoord<double> coord1, GeodeticCoord<double> coord2,
-	double seg_dist, double seg_dir,
-	std::vector<GeocentricCoord<float>>& arc_template_f,
-	bool apply_offset,
-	double& max_error_via_f_gc) {
+    GeodeticCoord<double> coord1, GeodeticCoord<double> coord2,
+    double seg_dist, double seg_dir,
+    std::vector<GeocentricCoord<float>>& arc_template_f,
+    bool apply_offset,
+    double& max_error_via_f_gc) {
 
-	//printf("(%7.02f, %7.02f, %d) -> (%7.02f, %7.02f, %d)\n",
-	//    coord1.lat, coord1.lon, (int)coord1.alt,
-	//    coord2.lat, coord2.lon, (int)coord2.alt);
+    //printf("(%7.02f, %7.02f, %d) -> (%7.02f, %7.02f, %d)\n",
+    //    coord1.lat, coord1.lon, (int)coord1.alt,
+    //    coord2.lat, coord2.lon, (int)coord2.alt);
 
-	GeocentricCoord<double> geocentric_start_d, geocentric_end_d;
-	earth.Forward(coord1.lat, coord1.lon, coord1.alt,
-		geocentric_start_d.x, geocentric_start_d.y, geocentric_start_d.z);
-	earth.Forward(coord2.lat, coord2.lon, coord2.alt,
-		geocentric_end_d.x, geocentric_end_d.y, geocentric_end_d.z);
+    GeocentricCoord<double> geocentric_start_d, geocentric_end_d;
+    earth.Forward(coord1.lat, coord1.lon, coord1.alt,
+        geocentric_start_d.x, geocentric_start_d.y, geocentric_start_d.z);
+    earth.Forward(coord2.lat, coord2.lon, coord2.alt,
+        geocentric_end_d.x, geocentric_end_d.y, geocentric_end_d.z);
 
-	GeocentricCoord<float> geocentric_start_f, geocentric_end_f;
-	geocentric_start_f.x = (float)geocentric_start_d.x;
-	geocentric_start_f.y = (float)geocentric_start_d.y;
-	geocentric_start_f.z = (float)geocentric_start_d.z;
-	geocentric_end_f.x = (float)geocentric_end_d.x;
-	geocentric_end_f.y = (float)geocentric_end_d.y;
-	geocentric_end_f.z = (float)geocentric_end_d.z;
+    GeocentricCoord<float> geocentric_start_f, geocentric_end_f;
+    geocentric_start_f.x = (float)geocentric_start_d.x;
+    geocentric_start_f.y = (float)geocentric_start_d.y;
+    geocentric_start_f.z = (float)geocentric_start_d.z;
+    geocentric_end_f.x = (float)geocentric_end_d.x;
+    geocentric_end_f.y = (float)geocentric_end_d.y;
+    geocentric_end_f.z = (float)geocentric_end_d.z;
 
-	float start_len_f = length(geocentric_start_f);
-	float end_len_f = length(geocentric_end_f);
+    float start_len_f = length(geocentric_start_f);
+    float end_len_f = length(geocentric_end_f);
 
-	Mat3x3<float> template_to_seg_f = getTemplateToSegMatrix(
-		geocentric_start_f, geocentric_end_f,
-		normalize(geocentric_start_f));
+    Mat3x3<float> template_to_seg_f = getTemplateToSegMatrix(
+        geocentric_start_f, geocentric_end_f,
+        normalize(geocentric_start_f));
 
-	GeocentricCoord<float> derived_end_f = arc_template_f.back() * end_len_f;
-	derived_end_f = template_to_seg_f * derived_end_f;
+    GeocentricCoord<float> derived_end_f = arc_template_f.back() * end_len_f;
+    derived_end_f = template_to_seg_f * derived_end_f;
 
-	GeocentricCoord<float> end_offset_f = geocentric_end_f - derived_end_f;
+    GeocentricCoord<float> end_offset_f = geocentric_end_f - derived_end_f;
 
-	max_error_via_f_gc = 0;
+    max_error_via_f_gc = 0;
 
-	for (unsigned int i = 0; i < arc_template_f.size(); i++) {
-		float interp_frac_f = (float)i / (float)(arc_template_f.size() - 1);
-		double interp_frac_d = (double)i / (double)(arc_template_f.size() - 1);
+    for (unsigned int i = 0; i < arc_template_f.size(); i++) {
+        float interp_frac_f = (float)i / (float)(arc_template_f.size() - 1);
+        double interp_frac_d = (double)i / (double)(arc_template_f.size() - 1);
 
-		float new_point_dist = start_len_f * (1.0f - interp_frac_f) + end_len_f * interp_frac_f;
+        float new_point_dist = start_len_f * (1.0f - interp_frac_f) + end_len_f * interp_frac_f;
 
-		GeocentricCoord<float> new_point_f = arc_template_f[i] * new_point_dist;
-		new_point_f = template_to_seg_f * new_point_f;
-		if (apply_offset) {
-			new_point_f = new_point_f + end_offset_f * interp_frac_f;
-		}
+        GeocentricCoord<float> new_point_f = arc_template_f[i] * new_point_dist;
+        new_point_f = template_to_seg_f * new_point_f;
+        if (apply_offset) {
+            new_point_f = new_point_f + end_offset_f * interp_frac_f;
+        }
 
-		GeocentricCoord<double> new_point_f_as_d;
-		new_point_f_as_d.x = new_point_f.x;
-		new_point_f_as_d.y = new_point_f.y;
-		new_point_f_as_d.z = new_point_f.z;
+        GeocentricCoord<double> new_point_f_as_d;
+        new_point_f_as_d.x = new_point_f.x;
+        new_point_f_as_d.y = new_point_f.y;
+        new_point_f_as_d.z = new_point_f.z;
 
-		GeodeticCoord<double> wpt_d;
-		double subseg_dist = interp_frac_d * seg_dist;
-		geods.Direct(coord1.lat, coord1.lon, seg_dir, subseg_dist, wpt_d.lat, wpt_d.lon);
-		wpt_d.alt = coord1.alt * (1.0 - interp_frac_d) + coord2.alt * interp_frac_d;
+        GeodeticCoord<double> wpt_d;
+        double subseg_dist = interp_frac_d * seg_dist;
+        geods.Direct(coord1.lat, coord1.lon, seg_dir, subseg_dist, wpt_d.lat, wpt_d.lon);
+        wpt_d.alt = coord1.alt * (1.0 - interp_frac_d) + coord2.alt * interp_frac_d;
 
-		GeocentricCoord<double> wpt_geocentric_d;
-		earth.Forward(
-			wpt_d.lat, wpt_d.lon, wpt_d.alt,
-			wpt_geocentric_d.x, wpt_geocentric_d.y, wpt_geocentric_d.z);
+        GeocentricCoord<double> wpt_geocentric_d;
+        earth.Forward(
+            wpt_d.lat, wpt_d.lon, wpt_d.alt,
+            wpt_geocentric_d.x, wpt_geocentric_d.y, wpt_geocentric_d.z);
 
-		double error = length(new_point_f_as_d - wpt_geocentric_d);
+        double error = length(new_point_f_as_d - wpt_geocentric_d);
 
-		//printf("err: %f\n", error);
+        //printf("err: %f\n", error);
 
-		max_error_via_f_gc = std::max(max_error_via_f_gc, error);
-	}
+        max_error_via_f_gc = std::max(max_error_via_f_gc, error);
+    }
 
-	//printf("max err: %.3f\n", max_error_via_f_gc);
+    //printf("max err: %.3f\n", max_error_via_f_gc);
 }
 
 void doTestEllipsoidVsSphere2(int divisor_pair_idx, bool apply_offset) {
-	const int TEST_COUNT = 100000;
-	const int DIVISOR_PAIRS[][2] = {
-		{ 32, 128 },
-		{ 64, 64 },
-		{ 128, 32 },
-		{ 256, 16 },
-		{ 256, 64 },
-		{ 512, 8 }
-	};
+    const int TEST_COUNT = 100000;
+    const int DIVISOR_PAIRS[][2] = {
+        { 32, 128 },
+        { 64, 64 },
+        { 128, 32 },
+        { 256, 16 },
+        { 256, 64 },
+        { 512, 8 }
+    };
 
-	const int PAIR_IDX = divisor_pair_idx;
-	const int STARTING_LINE_DIVISOR = DIVISOR_PAIRS[PAIR_IDX][0];
-	const int SEG_DIVISOR = DIVISOR_PAIRS[PAIR_IDX][1];
+    const int PAIR_IDX = divisor_pair_idx;
+    const int STARTING_LINE_DIVISOR = DIVISOR_PAIRS[PAIR_IDX][0];
+    const int SEG_DIVISOR = DIVISOR_PAIRS[PAIR_IDX][1];
 
-	const double STARTING_SEG_LEN = HALF_EARTH_CIRCUMFERENCE / STARTING_LINE_DIVISOR;
-	const double SUBSEG_LEN = STARTING_SEG_LEN / SEG_DIVISOR;
+    const double STARTING_SEG_LEN = HALF_EARTH_CIRCUMFERENCE / STARTING_LINE_DIVISOR;
+    const double SUBSEG_LEN = STARTING_SEG_LEN / SEG_DIVISOR;
 
-	printf("max seg len: %d m\n", (int)STARTING_SEG_LEN);
-	printf("max subseg len: %d m\n", (int)SUBSEG_LEN);
+    printf("max seg len: %d m\n", (int)STARTING_SEG_LEN);
+    printf("max subseg len: %d m\n", (int)SUBSEG_LEN);
 
-	std::vector<GeocentricCoord<float>> arc_template_f;
-	generateArcTemplate(STARTING_LINE_DIVISOR, SEG_DIVISOR, false, arc_template_f);
+    std::vector<GeocentricCoord<float>> arc_template_f;
+    generateArcTemplate(STARTING_LINE_DIVISOR, SEG_DIVISOR, false, arc_template_f);
 
-	double max_error_via_f_gc = 0;
-	double max_error_via_d_gc = 0;
-	double max_midpoint_error_d_gc = 0;
+    double max_error_via_f_gc = 0;
+    double max_error_via_d_gc = 0;
+    double max_midpoint_error_d_gc = 0;
 
-	srand(0);
-	for (int i = 0; i < TEST_COUNT; i++) {
+    srand(0);
+    for (int i = 0; i < TEST_COUNT; i++) {
 
-		if (((i + 1) % 1000) == 0) {
-			printf("test count: %d\r", i + 1);
-		}
+        if (((i + 1) % 1000) == 0) {
+            printf("test count: %d\r", i + 1);
+        }
 
-		double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
-		double lat1 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
-		double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
+        double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
+        double lat1 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
+        double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
 
-		double lat2, lon2;
-		geods.Direct(lat1, lon1, dir, STARTING_SEG_LEN, lat2, lon2);
+        double lat2, lon2;
+        geods.Direct(lat1, lon1, dir, STARTING_SEG_LEN, lat2, lon2);
 
-		double alt1 = ((double)rand() / (double)RAND_MAX) * 100000.0;
-		double alt2 = ((double)rand() / (double)RAND_MAX) * 100000.0;
+        double alt1 = ((double)rand() / (double)RAND_MAX) * 100000.0;
+        double alt2 = ((double)rand() / (double)RAND_MAX) * 100000.0;
 
-		double max_error_via_f_inner_gc = 0;
-		double max_error_via_d_inner_gc = 0;
-		double max_midpoint_error_d_inner_gc = 0;
+        double max_error_via_f_inner_gc = 0;
+        double max_error_via_d_inner_gc = 0;
+        double max_midpoint_error_d_inner_gc = 0;
 
-		testArcTemplate3(
-			{ lat1, lon1, alt1 }, { lat2, lon2, alt2 }, STARTING_SEG_LEN, dir,
-			arc_template_f, apply_offset, max_error_via_f_inner_gc);
+        testArcTemplate3(
+            { lat1, lon1, alt1 }, { lat2, lon2, alt2 }, STARTING_SEG_LEN, dir,
+            arc_template_f, apply_offset, max_error_via_f_inner_gc);
 
-		max_error_via_f_gc = std::max(max_error_via_f_gc, max_error_via_f_inner_gc);
-		max_error_via_d_gc = std::max(max_error_via_d_gc, max_error_via_d_inner_gc);
-		max_midpoint_error_d_gc = std::max(max_midpoint_error_d_gc, max_midpoint_error_d_inner_gc);
-	}
+        max_error_via_f_gc = std::max(max_error_via_f_gc, max_error_via_f_inner_gc);
+        max_error_via_d_gc = std::max(max_error_via_d_gc, max_error_via_d_inner_gc);
+        max_midpoint_error_d_gc = std::max(max_midpoint_error_d_gc, max_midpoint_error_d_inner_gc);
+    }
 
-	float meters_per_pix = calcMetersPerPixForDist((float)SUBSEG_LEN);
-	float pix_err = (float)max_error_via_f_gc / meters_per_pix;
+    float meters_per_pix = calcMetersPerPixForDist((float)SUBSEG_LEN);
+    float pix_err = (float)max_error_via_f_gc / meters_per_pix;
 
-	printf("test count: %d\n", TEST_COUNT);
-	printf("max err: %.3f m / %.1f pix\n", max_error_via_f_gc, pix_err);
+    printf("test count: %d\n", TEST_COUNT);
+    printf("max err: %.3f m / %.1f pix\n", max_error_via_f_gc, pix_err);
 }
 
 void testEllipsoidVsSphere2() {
-	//doTestEllipsoidVsSphere2(0, false);
-	//printf("\n");
-	//doTestEllipsoidVsSphere2(0, true);
-	//printf("\n");
-	//doTestEllipsoidVsSphere2(1, false);
-	//printf("\n");
-	//doTestEllipsoidVsSphere2(1, true);
-	//printf("\n");
-	//doTestEllipsoidVsSphere2(2, false);
-	//printf("\n");
-	//doTestEllipsoidVsSphere2(2, true);
-	//printf("\n");
-	doTestEllipsoidVsSphere2(3, false);
-	printf("\n");
-	doTestEllipsoidVsSphere2(3, true);
+    //doTestEllipsoidVsSphere2(0, false);
+    //printf("\n");
+    //doTestEllipsoidVsSphere2(0, true);
+    //printf("\n");
+    //doTestEllipsoidVsSphere2(1, false);
+    //printf("\n");
+    //doTestEllipsoidVsSphere2(1, true);
+    //printf("\n");
+    //doTestEllipsoidVsSphere2(2, false);
+    //printf("\n");
+    //doTestEllipsoidVsSphere2(2, true);
+    //printf("\n");
+    doTestEllipsoidVsSphere2(3, false);
+    printf("\n");
+    doTestEllipsoidVsSphere2(3, true);
 }
 
 void testArcTemplate(
@@ -1306,11 +1306,11 @@ void testArcTemplateMethod(bool testV1) {
     srand(0);
     for (int i = 0; i < TEST_COUNT; i++) {
 
-		if (((i + 1) % 1000) == 0) {
-			printf("test count: %d\r", i + 1);
-		}
+        if (((i + 1) % 1000) == 0) {
+            printf("test count: %d\r", i + 1);
+        }
 
-		double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
+        double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
         double lat1 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
         double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
 
@@ -1365,11 +1365,11 @@ void testArcTemplateMethod(bool testV1) {
         max_error_via_d_rhumb = std::max(max_error_via_d_rhumb, max_error_via_d_inner_rhumb);
     }
 
-	printf("test count: %d\n", TEST_COUNT);
+    printf("test count: %d\n", TEST_COUNT);
     //printf("\n%.3f / %.3f / %.3f / %.3f / %.3f / %.3f / %.3f\n",
     //    max_error_via_f_gc, max_error_via_f_ut_gc, max_error_via_d_gc, max_midpoint_error_d_gc,
     //    max_error_via_f_rhumb, max_error_via_f_ut_rhumb, max_error_via_d_rhumb);
-	printf("\n%.3f / %.3f / %.3f / %.3f / %.3f\n",
+    printf("\n%.3f / %.3f / %.3f / %.3f / %.3f\n",
         max_error_via_f_gc, max_error_via_d_gc, max_midpoint_error_d_gc,
         max_error_via_f_rhumb, max_error_via_d_rhumb);
 }
@@ -1430,7 +1430,8 @@ void testRhumbLineAsFloatError()
         GeodeticCoord<double> p1, p2;
 
         double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
-        p1.lat = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
+        //p1.lat = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
+        p1.lat = ((double)rand() / (double)RAND_MAX) * 170.0 - 85.0;
         p1.lon = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
         p1.alt = ((double)rand() / (double)RAND_MAX) * 100000.0;
 
@@ -1537,39 +1538,39 @@ void testGeoToXYZFloatVsDouble() {
 }
 
 void testRhumbTemplate1(
-	GeodeticCoord<double> coord1, GeodeticCoord<double> coord2,
-	double seg_dist, double seg_dir, float subseg_anglular_len,
-	unsigned int subseg_count, bool apply_offset,
-	double& max_error_via_f_rhumb,
+    GeodeticCoord<double> coord1, GeodeticCoord<double> coord2,
+    double seg_dist, double seg_dir, float subseg_anglular_len,
+    unsigned int subseg_count, bool apply_offset,
+    double& max_error_via_f_rhumb,
     FILE* actual_points, FILE* approx_points,
     FILE* approx_offset_points, FILE* axis_points) {
 
-	printf("(%7.02f, %7.02f, %d) -> (%7.02f, %7.02f, %d) @ %.02f deg\n",
-	    coord1.lat, coord1.lon, (int)coord1.alt,
-	    coord2.lat, coord2.lon, (int)coord2.alt,
+    printf("(%7.02f, %7.02f, %d) -> (%7.02f, %7.02f, %d) @ %.02f deg\n",
+        coord1.lat, coord1.lon, (int)coord1.alt,
+        coord2.lat, coord2.lon, (int)coord2.alt,
         seg_dir);
 
-	GeocentricCoord<double> geocentric_start_d, geocentric_end_d;
-	earth.Forward(coord1.lat, coord1.lon, coord1.alt,
-		geocentric_start_d.x, geocentric_start_d.y, geocentric_start_d.z);
-	earth.Forward(coord2.lat, coord2.lon, coord2.alt,
-		geocentric_end_d.x, geocentric_end_d.y, geocentric_end_d.z);
+    GeocentricCoord<double> geocentric_start_d, geocentric_end_d;
+    earth.Forward(coord1.lat, coord1.lon, coord1.alt,
+        geocentric_start_d.x, geocentric_start_d.y, geocentric_start_d.z);
+    earth.Forward(coord2.lat, coord2.lon, coord2.alt,
+        geocentric_end_d.x, geocentric_end_d.y, geocentric_end_d.z);
 
-	GeocentricCoord<float> geocentric_start_f, geocentric_end_f;
-	geocentric_start_f.x = (float)geocentric_start_d.x;
-	geocentric_start_f.y = (float)geocentric_start_d.y;
-	geocentric_start_f.z = (float)geocentric_start_d.z;
-	geocentric_end_f.x = (float)geocentric_end_d.x;
-	geocentric_end_f.y = (float)geocentric_end_d.y;
-	geocentric_end_f.z = (float)geocentric_end_d.z;
+    GeocentricCoord<float> geocentric_start_f, geocentric_end_f;
+    geocentric_start_f.x = (float)geocentric_start_d.x;
+    geocentric_start_f.y = (float)geocentric_start_d.y;
+    geocentric_start_f.z = (float)geocentric_start_d.z;
+    geocentric_end_f.x = (float)geocentric_end_d.x;
+    geocentric_end_f.y = (float)geocentric_end_d.y;
+    geocentric_end_f.z = (float)geocentric_end_d.z;
 
-	float start_len_f = length(geocentric_start_f);
-	float end_len_f = length(geocentric_end_f);
+    float start_len_f = length(geocentric_start_f);
+    float end_len_f = length(geocentric_end_f);
 
-	Mat3x3<float> r1, r2, r1T;
+    Mat3x3<float> r1, r2, r1T;
     GeocentricCoord<float> rot_axis;
-	auto template_matrix = getRhumbTemplateMatrix1(
-		geocentric_start_f, (float)seg_dir, subseg_anglular_len,
+    auto template_matrix = getRhumbTemplateMatrix1(
+        geocentric_start_f, (float)seg_dir, subseg_anglular_len,
         r1, r2, r1T, rot_axis);
 
     char buf[256];
@@ -1597,7 +1598,7 @@ void testRhumbTemplate1(
     writeToFileF(rot_axis1, axis_points);
 
     // generate derived points
-	std::vector<GeocentricCoord<float>> derived_points_f;
+    std::vector<GeocentricCoord<float>> derived_points_f;
     
     GeocentricCoord<float> last_normalized_point = normalize(geocentric_start_f);
     //auto start_point2 = geocentric_start_f;
@@ -1609,7 +1610,7 @@ void testRhumbTemplate1(
     derived_points_f.push_back(geocentric_start_f);
     writeToFileF(derived_points_f.back(), approx_points);
     for (unsigned int i = 0; i < subseg_count; i++) {
-		float interp_frac_f = (float)(i + 1) / (float)subseg_count;
+        float interp_frac_f = (float)(i + 1) / (float)subseg_count;
 
         float new_point_len = start_len_f * (1.0f - interp_frac_f) + end_len_f * interp_frac_f;
         //float new_point_len = start_len2_f * (1.0f - interp_frac_f) + end_len2_f * interp_frac_f;
@@ -1621,59 +1622,59 @@ void testRhumbTemplate1(
         writeToFileF(new_coord, approx_points);
         last_normalized_point = next_normalized_coord;
 
-		double lat, lon, alt;
-		earth.Reverse(new_coord.x, new_coord.y, new_coord.z, lat, lon, alt);
-		int a = 0;
-	}
+        double lat, lon, alt;
+        earth.Reverse(new_coord.x, new_coord.y, new_coord.z, lat, lon, alt);
+        int a = 0;
+    }
 
     // generate real points
-	std::vector<GeocentricCoord<double>> real_points;
-	real_points.push_back(geocentric_start_d);
+    std::vector<GeocentricCoord<double>> real_points;
+    real_points.push_back(geocentric_start_d);
     writeToFileD(real_points.back(), actual_points);
     for (unsigned int i = 0; i < subseg_count - 1; i++) {
-		double interp_frac_d = (double)(i + 1) / (double)subseg_count;
-		
-		double lat, lon;
-		double dist = seg_dist * interp_frac_d;
-		rhumb.Direct(coord1.lat, coord1.lon, 90.0 - seg_dir, dist, lat, lon);
+        double interp_frac_d = (double)(i + 1) / (double)subseg_count;
+        
+        double lat, lon;
+        double dist = seg_dist * interp_frac_d;
+        rhumb.Direct(coord1.lat, coord1.lon, 90.0 - seg_dir, dist, lat, lon);
 
-		double alt = coord1.alt * (1.0f - interp_frac_d) + coord2.alt * interp_frac_d;
+        double alt = coord1.alt * (1.0f - interp_frac_d) + coord2.alt * interp_frac_d;
 
-		GeocentricCoord<double> p;
-		earth.Forward(lat, lon, alt, p.x, p.y, p.z);
-		real_points.push_back(p);
+        GeocentricCoord<double> p;
+        earth.Forward(lat, lon, alt, p.x, p.y, p.z);
+        real_points.push_back(p);
         writeToFileD(real_points.back(), actual_points);
     }
-	real_points.push_back(geocentric_end_d);
+    real_points.push_back(geocentric_end_d);
     writeToFileD(real_points.back(), actual_points);
 
     // apply the offset
-	if (apply_offset) {
-		GeocentricCoord<float> end_offset_f = geocentric_end_f - derived_points_f.back();
-		for (unsigned int i = 0; i < derived_points_f.size(); i++) {
-			float interp_frac_f = (float)i / (float)(derived_points_f.size() - 1);
-			derived_points_f[i] = derived_points_f[i] + (end_offset_f * interp_frac_f);
+    if (apply_offset) {
+        GeocentricCoord<float> end_offset_f = geocentric_end_f - derived_points_f.back();
+        for (unsigned int i = 0; i < derived_points_f.size(); i++) {
+            float interp_frac_f = (float)i / (float)(derived_points_f.size() - 1);
+            derived_points_f[i] = derived_points_f[i] + (end_offset_f * interp_frac_f);
             writeToFileF(derived_points_f[i], approx_offset_points);
         }
-	}
+    }
 
-	max_error_via_f_rhumb = 0;
+    max_error_via_f_rhumb = 0;
 
     // find the error
-	for (unsigned int i = 0; i < derived_points_f.size(); i++) {
-		GeocentricCoord<double> derived_point_f_as_d;
-		derived_point_f_as_d.x = derived_points_f[i].x;
-		derived_point_f_as_d.y = derived_points_f[i].y;
-		derived_point_f_as_d.z = derived_points_f[i].z;
+    for (unsigned int i = 0; i < derived_points_f.size(); i++) {
+        GeocentricCoord<double> derived_point_f_as_d;
+        derived_point_f_as_d.x = derived_points_f[i].x;
+        derived_point_f_as_d.y = derived_points_f[i].y;
+        derived_point_f_as_d.z = derived_points_f[i].z;
 
-		double error = length(derived_point_f_as_d - real_points[i]);
+        double error = length(derived_point_f_as_d - real_points[i]);
 
-		printf("err: %f\n", error);
+        printf("err: %f\n", error);
 
-		max_error_via_f_rhumb = std::max(max_error_via_f_rhumb, error);
-	}
+        max_error_via_f_rhumb = std::max(max_error_via_f_rhumb, error);
+    }
 
-	//printf("max err: %.3f\n", max_error_via_f_gc);
+    //printf("max err: %.3f\n", max_error_via_f_gc);
 }
 
 void testRhumbFromFvDirect(
@@ -1807,78 +1808,78 @@ void testRhumbFromFvDirect(
 }
 
 void doTestRhumbApprox1(int divisor_pair_idx, bool apply_offset) {
-	const int TEST_COUNT = 25;
-	const int DIVISOR_PAIRS[][2] = {
-		{ 32, 128 },
-		{ 64, 64 },
-		{ 128, 32 },
-		{ 256, 16 },
-		{ 256, 64 },
-		{ 512, 8 }
-	};
+    const int TEST_COUNT = 25;
+    const int DIVISOR_PAIRS[][2] = {
+        { 32, 128 },
+        { 64, 64 },
+        { 128, 32 },
+        { 256, 16 },
+        { 256, 64 },
+        { 512, 8 }
+    };
 
-	const int PAIR_IDX = divisor_pair_idx;
-	const int STARTING_LINE_DIVISOR = DIVISOR_PAIRS[PAIR_IDX][0];
-	const int SEG_DIVISOR = DIVISOR_PAIRS[PAIR_IDX][1];
+    const int PAIR_IDX = divisor_pair_idx;
+    const int STARTING_LINE_DIVISOR = DIVISOR_PAIRS[PAIR_IDX][0];
+    const int SEG_DIVISOR = DIVISOR_PAIRS[PAIR_IDX][1];
 
-	const double STARTING_SEG_LEN = HALF_EARTH_CIRCUMFERENCE / STARTING_LINE_DIVISOR;
-	const double SUBSEG_LEN = STARTING_SEG_LEN / SEG_DIVISOR;
+    const double STARTING_SEG_LEN = HALF_EARTH_CIRCUMFERENCE / STARTING_LINE_DIVISOR;
+    const double SUBSEG_LEN = STARTING_SEG_LEN / SEG_DIVISOR;
 
-	printf("max seg len: %d m\n", (int)STARTING_SEG_LEN);
-	printf("max subseg len: %d m\n", (int)SUBSEG_LEN);
+    printf("max seg len: %d m\n", (int)STARTING_SEG_LEN);
+    printf("max subseg len: %d m\n", (int)SUBSEG_LEN);
 
-	double max_error_via_f_rhumb = 0;
-	double max_error_via_d_rhumb = 0;
-	double max_midpoint_error_d_rhumb = 0;
+    double max_error_via_f_rhumb = 0;
+    double max_error_via_d_rhumb = 0;
+    double max_midpoint_error_d_rhumb = 0;
 
     FILE* actual_points = fopen("actual_points.txt", "w");
     FILE* approx_points = fopen("approx_points.txt", "w");
     FILE* approx_offset_points = fopen("approx_offset_points.txt", "w");
     FILE* axis_points = fopen("axis_points.txt", "w");
 
-	srand(0);
+    srand(0);
     for (int i = 0; i < TEST_COUNT; i++) {
     //for (int i = 0; i < 7; i++) {
 
-		if (((i + 1) % 1000) == 0) {
-			printf("test count: %d\r", i + 1);
-		}
+        if (((i + 1) % 1000) == 0) {
+            printf("test count: %d\r", i + 1);
+        }
 
         //double dir = 15.0 * i;
         //double lat1 = 88.68;
         //double lon1 = -65;
 
-		double dir = ((double)rand() / (double)RAND_MAX) * 90.0;
-		double lat1 = ((double)rand() / (double)RAND_MAX) * 90.0;
-		double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
+        double dir = ((double)rand() / (double)RAND_MAX) * 90.0;
+        double lat1 = ((double)rand() / (double)RAND_MAX) * 90.0;
+        double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
 
         //double dir = ((double)rand() / (double)RAND_MAX) * 360.0;
-		//double lat1 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
-		//double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
+        //double lat1 = ((double)rand() / (double)RAND_MAX) * 180.0 - 90.0;
+        //double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
 
-		double lat2, lon2;
-		rhumb.Direct(lat1, lon1, 90.0 - dir, STARTING_SEG_LEN, lat2, lon2);
-		//rhumb.Direct(lat1, lon1, 0, STARTING_SEG_LEN, lat2, lon2);
-		//rhumb.Direct(lat1, lon1, 45, STARTING_SEG_LEN, lat2, lon2);
-		//rhumb.Direct(lat1, lon1, 90, STARTING_SEG_LEN, lat2, lon2);
-		//rhumb.Direct(lat1, lon1, -45, STARTING_SEG_LEN, lat2, lon2);
+        double lat2, lon2;
+        rhumb.Direct(lat1, lon1, 90.0 - dir, STARTING_SEG_LEN, lat2, lon2);
+        //rhumb.Direct(lat1, lon1, 0, STARTING_SEG_LEN, lat2, lon2);
+        //rhumb.Direct(lat1, lon1, 45, STARTING_SEG_LEN, lat2, lon2);
+        //rhumb.Direct(lat1, lon1, 90, STARTING_SEG_LEN, lat2, lon2);
+        //rhumb.Direct(lat1, lon1, -45, STARTING_SEG_LEN, lat2, lon2);
 
-		// rhumb lines that get sent over the poles are invalid -- redo
-		if (isnan(lon2)) {
-			i--;
-			continue;
-		}
+        // rhumb lines that get sent over the poles are invalid -- redo
+        if (isnan(lon2)) {
+            i--;
+            continue;
+        }
 
-		//double alt1 = ((double)rand() / (double)RAND_MAX) * 100000.0;
-		//double alt2 = ((double)rand() / (double)RAND_MAX) * 100000.0;
+        //double alt1 = ((double)rand() / (double)RAND_MAX) * 100000.0;
+        //double alt2 = ((double)rand() / (double)RAND_MAX) * 100000.0;
         double alt1 = 5000;
         double alt2 = 5000;
 
-		double max_error_via_f_inner_rhumb = 0;
-		//double max_error_via_d_inner_rhumb = 0;
-		double max_midpoint_error_d_inner_rhumb = 0;
+        double max_error_via_f_inner_rhumb = 0;
+        //double max_error_via_d_inner_rhumb = 0;
+        double max_midpoint_error_d_inner_rhumb = 0;
 
-		float subseg_anglular_len = (float)Math::pi() / (float)(STARTING_LINE_DIVISOR * SEG_DIVISOR);
+        float subseg_anglular_len = (float)Math::pi() / (float)(STARTING_LINE_DIVISOR * SEG_DIVISOR);
         //if (i == 2 || 1)
         //    testRhumbTemplate1(
         //        { lat1, lon1, alt1 }, { lat2, lon2, alt2 }, STARTING_SEG_LEN, dir,
@@ -1889,43 +1890,43 @@ void doTestRhumbApprox1(int divisor_pair_idx, bool apply_offset) {
             subseg_anglular_len, SEG_DIVISOR, apply_offset,
             max_error_via_f_inner_rhumb, actual_points, approx_points, approx_offset_points, axis_points);
 
-		max_error_via_f_rhumb = std::max(max_error_via_f_rhumb, max_error_via_f_inner_rhumb);
-		//max_error_via_d_rhumb = std::max(max_error_via_d_rhumb, max_error_via_d_inner_rhumb);
-		max_midpoint_error_d_rhumb = std::max(max_midpoint_error_d_rhumb, max_midpoint_error_d_inner_rhumb);
-	}
+        max_error_via_f_rhumb = std::max(max_error_via_f_rhumb, max_error_via_f_inner_rhumb);
+        //max_error_via_d_rhumb = std::max(max_error_via_d_rhumb, max_error_via_d_inner_rhumb);
+        max_midpoint_error_d_rhumb = std::max(max_midpoint_error_d_rhumb, max_midpoint_error_d_inner_rhumb);
+    }
 
     fclose(actual_points);
     fclose(approx_points);
     fclose(approx_offset_points);
     fclose(axis_points);
 
-	float meters_per_pix = calcMetersPerPixForDist((float)SUBSEG_LEN);
-	float pix_err = (float)max_error_via_f_rhumb / meters_per_pix;
+    float meters_per_pix = calcMetersPerPixForDist((float)SUBSEG_LEN);
+    float pix_err = (float)max_error_via_f_rhumb / meters_per_pix;
 
-	printf("test count: %d\n", TEST_COUNT);
-	printf("max err: %.3f m / %.1f pix\n", max_error_via_f_rhumb, pix_err);
+    printf("test count: %d\n", TEST_COUNT);
+    printf("max err: %.3f m / %.1f pix\n", max_error_via_f_rhumb, pix_err);
 }
 
 void testRhumbApprox1() {
 
-	//const double SUBSEG_ANGLE = Math::pi() / 4096.0;
+    //const double SUBSEG_ANGLE = Math::pi() / 4096.0;
 
-	//double x, y, z;
-	//earth.Forward(45, 0, 0, x, y, z);
-	//GeocentricCoord<float> p1 = { (float)x, (float)y, (float)z };
-	//auto m = getRhumbTemplateMatrix(p1, 45.0f, (float)SUBSEG_ANGLE);
-	//p1 = m * p1;
-	//p1 = m * p1;
-	//p1 = m * p1;
+    //double x, y, z;
+    //earth.Forward(45, 0, 0, x, y, z);
+    //GeocentricCoord<float> p1 = { (float)x, (float)y, (float)z };
+    //auto m = getRhumbTemplateMatrix(p1, 45.0f, (float)SUBSEG_ANGLE);
+    //p1 = m * p1;
+    //p1 = m * p1;
+    //p1 = m * p1;
 
     doTestRhumbApprox1(3, true);
 }
 
 int _tmain(int argc, _TCHAR* argv[]) {
-	//testEllipsoidVsSphere1();
-	//testEllipsoidVsSphere2();
+    //testEllipsoidVsSphere1();
+    //testEllipsoidVsSphere2();
 
-	testRhumbApprox1();
+    //testRhumbApprox1();
 
 
 
@@ -1935,7 +1936,7 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
     //testGeodMidpointToStraightLineMidpointError();
 
-    //testRhumbLineAsFloatError();
+    testRhumbLineAsFloatError();
 
     //testGeoToXYZFloatVsDouble();
 
