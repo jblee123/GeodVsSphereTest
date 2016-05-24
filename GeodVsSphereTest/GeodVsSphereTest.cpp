@@ -1,5 +1,3 @@
-#include "stdafx.h"
-
 #define _USE_MATH_DEFINES
 #include <cmath>
 
@@ -1922,7 +1920,7 @@ void testRhumbApprox1() {
     doTestRhumbApprox1(3, true);
 }
 
-int _tmain(int argc, _TCHAR* argv[]) {
+int main(int argc, char* argv[]) {
     //testEllipsoidVsSphere1();
     //testEllipsoidVsSphere2();
 
