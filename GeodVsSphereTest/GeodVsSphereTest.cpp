@@ -9,6 +9,8 @@
 #include <GeographicLib/Math.hpp>
 #include <GeographicLib/Rhumb.hpp>
 
+#include "RhumbLines.h"
+
 using namespace GeographicLib;
 
 #define WGS84_R2_METERS 6371007.1809   // radius of sphere of equal area
@@ -100,7 +102,7 @@ struct Mat3x3 {
 
 //const double b = (1.0 - Constants::WGS84_f()) * Constants::WGS84_a();
 const Geodesic geods(Constants::WGS84_a(), Constants::WGS84_f());
-const Rhumb rhumb(Constants::WGS84_a(), Constants::WGS84_f());
+const Rhumb rhumb(Constants::WGS84_a(), Constants::WGS84_f(), false);
 const Geocentric earth(Constants::WGS84_a(), Constants::WGS84_f());
 const double EARTH_CIRCUMFERENCE = 2.0 * GeographicLib::Math::pi() * Constants::WGS84_a();
 const double HALF_EARTH_CIRCUMFERENCE = EARTH_CIRCUMFERENCE * 0.5;
@@ -1920,6 +1922,47 @@ void testRhumbApprox1() {
     doTestRhumbApprox1(3, true);
 }
 
+void testPortedRhumbCode() {
+
+    struct Query
+    {
+        double lat, lon, heading, dist;
+    };
+
+    double max_dlat = 0;
+    double max_dlon = 0;
+    auto doATest = [&] (Query q) {
+        double lat2_gl, lon2_gl;
+        double lat2_mc, lon2_mc;
+
+        rhumb.Direct(q.lat, q.lon, q.heading, q.dist, lat2_gl, lon2_gl);
+        RhumbLine_Direct(q.lat, q.lon, q.heading, q.dist, &lat2_mc, &lon2_mc);
+        double dlat = abs(lat2_gl - lat2_mc);
+        double dlon = abs(lon2_gl - lon2_mc);
+        max_dlat = std::max(max_dlat, dlat);
+        max_dlon = std::max(max_dlon, dlon);
+        int a = 0;
+    };
+
+    srand(0);
+    for (int i = 0; i < 10000; i++)
+    {
+        double lat1 = ((double)rand() / (double)RAND_MAX) * 90.0;
+        double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
+        double dir = ((double)rand() / (double)RAND_MAX) * 90.0;
+        double dist = ((double)rand() / (double)RAND_MAX) * 20000.0;
+
+        //doATest({ 0, 0, 45, 100000 });
+        doATest({ lat1, lon1, dir, dist });
+    }
+    int a = 0;
+    //doATest({ 0, 0, 45, 100000 });
+    //doATest({ 20, 0, 45, 100000 });
+    //doATest({ -45, 20, 100, 100000 });
+    //doATest({ -70, 135, 235, 100000 });
+    //doATest({ 70, -135, 60, 100000 });
+}
+
 int main(int argc, char* argv[]) {
     //testEllipsoidVsSphere1();
     //testEllipsoidVsSphere2();
@@ -1934,9 +1977,11 @@ int main(int argc, char* argv[]) {
 
     //testGeodMidpointToStraightLineMidpointError();
 
-    testRhumbLineAsFloatError();
+    //testRhumbLineAsFloatError();
 
     //testGeoToXYZFloatVsDouble();
+
+    testPortedRhumbCode();
 
     return 0;
 }

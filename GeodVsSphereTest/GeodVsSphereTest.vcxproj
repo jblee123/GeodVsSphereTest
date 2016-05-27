@@ -77,11 +77,15 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="GeodVsSphereTest.cpp" />
+    <ClCompile Include="RhumbLines.c" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\GeographicLib-1.44\windows\Geographic-vc13n.vcxproj">
       <Project>{4cfbcd6c-956c-42bc-a863-3c60f3ed9cc1}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RhumbLines.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
