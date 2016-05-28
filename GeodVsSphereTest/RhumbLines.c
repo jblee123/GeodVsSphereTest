@@ -26,24 +26,16 @@
 #define WGS84_EPS       (-0.0016792203863837047)
 #define WGS84_QUARTER_MERIDIAN (WGS84_b_METERS * WGS84_Ec)
 
-// Max depth required for sncndn.  Probably 5 is enough.
-#define SNCNDN_DEPTH 13
+// Max depth required for sncndn. Probably 5 is enough.
+#define SNCNDN_DEPTH 5
 
-static inline double max(double a, double b)
-{
-    return (a > b) ? a : b;
-}
-
-static inline double min(double a, double b)
-{
-    return (a < b) ? a : b;
-}
-
+// common
 static inline double eatanhe(double x, double es)
 {
     return es > 0.0 ? es * atanh(es * x) : -es * atan(es * x);
 }
 
+// common
 static inline double taupf(double tau, double es)
 {
     double tau1 = hypot(1.0, tau);
@@ -51,190 +43,14 @@ static inline double taupf(double tau, double es)
     return hypot(1.0, sig) * tau - sig * tau1;
 }
 
-// param in degrees
+// common
 static inline double AngNormalize(double x)
 {
     x = fmod(x, 360.0);
     return x < -180 ? x + 360 : (x < 180 ? x : x - 360);
 }
 
-static inline double ParametricLatitude(double phi)
-{
-    return atan((1.0 - WGS84_f) * tan(phi));
-}
-
-static inline double Delta(double sn, double cn)
-{
-    return sqrt(WGS84_K2 < 0 ? 1 - WGS84_K2 * sn*sn : WGS84_KP2 + WGS84_K2 * cn*cn);
-}
-
-static double RF(double x, double y, double z)
-{
-    // Carlson, eqs 2.2 - 2.7
-    double tolRF = pow(3 * DBL_EPSILON * 0.01, 1.0 / 8.0);
-    double
-        A0 = (x + y + z) / 3,
-        An = A0,
-        Q = max(max(fabs(A0 - x), fabs(A0 - y)), fabs(A0 - z)) / tolRF,
-        x0 = x,
-        y0 = y,
-        z0 = z,
-        mul = 1;
-    while (Q >= mul * fabs(An)) {
-        // Max 6 trips
-        double lam = sqrt(x0)*sqrt(y0) + sqrt(y0)*sqrt(z0) + sqrt(z0)*sqrt(x0);
-        An = (An + lam) / 4;
-        x0 = (x0 + lam) / 4;
-        y0 = (y0 + lam) / 4;
-        z0 = (z0 + lam) / 4;
-        mul *= 4;
-    }
-    double
-        X = (A0 - x) / (mul * An),
-        Y = (A0 - y) / (mul * An),
-        Z = -(X + Y),
-        E2 = X*Y - Z*Z,
-        E3 = X*Y*Z;
-    // http://dlmf.nist.gov/19.36.E1
-    // Polynomial is
-    // (1 - E2/10 + E3/14 + E2^2/24 - 3*E2*E3/44
-    //    - 5*E2^3/208 + 3*E3^2/104 + E2^2*E3/16)
-    // convert to Horner form...
-    return (E3 * (6930 * E3 + E2 * (15015 * E2 - 16380) + 17160) +
-        E2 * ((10010 - 5775 * E2) * E2 - 24024) + 240240) /
-        (240240 * sqrt(An));
-}
-
-static double RD(double x, double y, double z)
-{
-    // Carlson, eqs 2.28 - 2.34
-    double tolRD = pow(0.2 * (DBL_EPSILON * 0.01), 1.0 / 8.0);
-    double
-        A0 = (x + y + 3 * z) / 5,
-        An = A0,
-        Q = max(max(fabs(A0 - x), fabs(A0 - y)), fabs(A0 - z)) / tolRD,
-        x0 = x,
-        y0 = y,
-        z0 = z,
-        mul = 1,
-        s = 0;
-    while (Q >= mul * fabs(An)) {
-        // Max 7 trips
-        double lam = sqrt(x0)*sqrt(y0) + sqrt(y0)*sqrt(z0) + sqrt(z0)*sqrt(x0);
-        s += 1 / (mul * sqrt(z0) * (z0 + lam));
-        An = (An + lam) / 4;
-        x0 = (x0 + lam) / 4;
-        y0 = (y0 + lam) / 4;
-        z0 = (z0 + lam) / 4;
-        mul *= 4;
-    }
-    double
-        X = (A0 - x) / (mul * An),
-        Y = (A0 - y) / (mul * An),
-        Z = -(X + Y) / 3,
-        E2 = X*Y - 6 * Z*Z,
-        E3 = (3 * X*Y - 8 * Z*Z)*Z,
-        E4 = 3 * (X*Y - Z*Z) * Z*Z,
-        E5 = X*Y*Z*Z*Z;
-    // http://dlmf.nist.gov/19.36.E2
-    // Polynomial is
-    // (1 - 3*E2/14 + E3/6 + 9*E2^2/88 - 3*E4/22 - 9*E2*E3/52 + 3*E5/26
-    //    - E2^3/16 + 3*E3^2/40 + 3*E2*E4/20 + 45*E2^2*E3/272
-    //    - 9*(E3*E4+E2*E5)/68)
-    return ((471240 - 540540 * E2) * E5 +
-        (612612 * E2 - 540540 * E3 - 556920) * E4 +
-        E3 * (306306 * E3 + E2 * (675675 * E2 - 706860) + 680680) +
-        E2 * ((417690 - 255255 * E2) * E2 - 875160) + 4084080) /
-        (4084080 * mul * An * sqrt(An)) + 3 * s;
-}
-
-static double E(double sn, double cn, double dn)
-{
-    double
-        cn2 = cn*cn, dn2 = dn*dn, sn2 = sn*sn,
-        ei = RF(cn2, dn2, 1) - WGS84_K2 * sn2 * RD(cn2, dn2, 1) / 3;
-        //ei = (_k2 <= 0 ?
-        //    // Carlson, eq. 4.6 and
-        //    // http://dlmf.nist.gov/19.25.E9
-        //    RF(cn2, dn2, 1) - _k2 * sn2 * RD(cn2, dn2, 1) / 3 :
-        //    (_kp2 >= 0 ?
-        //        // http://dlmf.nist.gov/19.25.E10
-        //        _kp2 * RF(cn2, dn2, 1) +
-        //        _k2 * _kp2 * sn2 * RD(cn2, 1, dn2) / 3 +
-        //        _k2 * abs(cn) / dn :
-        //        // http://dlmf.nist.gov/19.25.E11
-        //        -_kp2 * sn2 * RD(dn2, 1, cn2) / 3 + dn / abs(cn)));
-    ei *= fabs(sn);
-    // Enforce usual trig-like symmetries
-    if (cn < 0)
-        ei = 2 * WGS84_Ec - ei;
-    if (sn < 0)
-        ei = -ei;
-    return ei;
-}
-
-static inline double Ed(double ang)
-{
-    //double n = ceil(ang / 360.0 - 0.5);
-    //ang -= 360.0 * n;
-    //double sn, cn;
-    //sincosd(ang, &sn, &cn);
-    //return E(sn, cn, Delta(sn, cn)) + 4 * WGS84_Ec * n;
-
-    double sn = sin(ang);
-    double cn = cos(ang);
-    return E(sn, cn, Delta(sn, cn));
-}
-
-static double Einv(double x)
-{
-    double tolJAC = sqrt(DBL_EPSILON * 0.01);
-    double n = floor(x / (2 * WGS84_Ec) + 0.5);
-    x -= 2 * WGS84_Ec * n;      // x now in [-ec, ec)
-                                // Linear approximation
-    double phi = PI * x / (2 * WGS84_Ec); // phi in [-pi/2, pi/2)
-                                          // First order correction
-    phi -= WGS84_EPS * sin(2 * phi) / 2;
-    for (int i = 0; i < SNCNDN_DEPTH; ++i) {
-        double
-            sn = sin(phi),
-            cn = cos(phi),
-            dn = Delta(sn, cn),
-            err = (E(sn, cn, dn) - x) / dn;
-        phi = phi - err;
-        if (fabs(err) < tolJAC)
-            break;
-    }
-    return n * PI + phi;
-}
-
-static inline double MeridianDistance(double phi)
-{
-    return WGS84_b_METERS * Ed(ParametricLatitude(phi));
-}
-
-static inline double InverseParametricLatitude(double beta)
-{
-    return atan(tan(beta) / (1.0 - WGS84_f));
-}
-
-static inline double InverseRectifyingLatitude(double mu)
-{
-    if (fabs(mu) == (PI / 2.0))
-        return mu;
-    return InverseParametricLatitude(Einv(mu * WGS84_Ec / (PI / 2.0)));
-}
-
-static inline double Dasinh(double x, double y)
-{
-    double d = x - y;
-    double hx = hypot(1.0, x);
-    double hy = hypot(1.0, y);
-    return d ? asinh(x*y > 0 ? d * (x + y) / (x*hy + y*hx) :
-        x*hy - y*hx) / d :
-        1 / hx;
-}
-
+// common
 static inline double Datan(double x, double y)
 {
     double d = x - y;
@@ -243,11 +59,7 @@ static inline double Datan(double x, double y)
         1 / (1 + xy);
 }
 
-static inline double Dgdinv(double x, double y)
-{
-    return Dasinh(x, y) / Datan(x, y);
-}
-
+// common
 static double SinCosSeries(
     double x, double y, const double c[], int n)
 {
@@ -321,6 +133,197 @@ static double SinCosSeries(
     return s;
 }
 
+
+
+
+
+
+// direct-only
+static inline double max(double a, double b)
+{
+    return (a > b) ? a : b;
+}
+
+// direct-only
+static inline double min(double a, double b)
+{
+    return (a < b) ? a : b;
+}
+
+// direct-only
+static inline double Delta(double sn, double cn)
+{
+    return sqrt(WGS84_K2 < 0 ? 1 - WGS84_K2 * sn*sn : WGS84_KP2 + WGS84_K2 * cn*cn);
+}
+
+// direct-only
+static double RF(double x, double y, double z)
+{
+    // Carlson, eqs 2.2 - 2.7
+    double tolRF = pow(3 * DBL_EPSILON * 0.01, 1.0 / 8.0);
+    double
+        A0 = (x + y + z) / 3,
+        An = A0,
+        Q = max(max(fabs(A0 - x), fabs(A0 - y)), fabs(A0 - z)) / tolRF,
+        x0 = x,
+        y0 = y,
+        z0 = z,
+        mul = 1;
+    while (Q >= mul * fabs(An)) {
+        // Max 6 trips
+        double lam = sqrt(x0)*sqrt(y0) + sqrt(y0)*sqrt(z0) + sqrt(z0)*sqrt(x0);
+        An = (An + lam) / 4;
+        x0 = (x0 + lam) / 4;
+        y0 = (y0 + lam) / 4;
+        z0 = (z0 + lam) / 4;
+        mul *= 4;
+    }
+    double
+        X = (A0 - x) / (mul * An),
+        Y = (A0 - y) / (mul * An),
+        Z = -(X + Y),
+        E2 = X*Y - Z*Z,
+        E3 = X*Y*Z;
+    // http://dlmf.nist.gov/19.36.E1
+    // Polynomial is
+    // (1 - E2/10 + E3/14 + E2^2/24 - 3*E2*E3/44
+    //    - 5*E2^3/208 + 3*E3^2/104 + E2^2*E3/16)
+    // convert to Horner form...
+    return (E3 * (6930 * E3 + E2 * (15015 * E2 - 16380) + 17160) +
+        E2 * ((10010 - 5775 * E2) * E2 - 24024) + 240240) /
+        (240240 * sqrt(An));
+}
+
+// direct-only
+static double RD(double x, double y, double z)
+{
+    // Carlson, eqs 2.28 - 2.34
+    double tolRD = pow(0.2 * (DBL_EPSILON * 0.01), 1.0 / 8.0);
+    double
+        A0 = (x + y + 3 * z) / 5,
+        An = A0,
+        Q = max(max(fabs(A0 - x), fabs(A0 - y)), fabs(A0 - z)) / tolRD,
+        x0 = x,
+        y0 = y,
+        z0 = z,
+        mul = 1,
+        s = 0;
+    while (Q >= mul * fabs(An)) {
+        // Max 7 trips
+        double lam = sqrt(x0)*sqrt(y0) + sqrt(y0)*sqrt(z0) + sqrt(z0)*sqrt(x0);
+        s += 1 / (mul * sqrt(z0) * (z0 + lam));
+        An = (An + lam) / 4;
+        x0 = (x0 + lam) / 4;
+        y0 = (y0 + lam) / 4;
+        z0 = (z0 + lam) / 4;
+        mul *= 4;
+    }
+    double
+        X = (A0 - x) / (mul * An),
+        Y = (A0 - y) / (mul * An),
+        Z = -(X + Y) / 3,
+        E2 = X*Y - 6 * Z*Z,
+        E3 = (3 * X*Y - 8 * Z*Z)*Z,
+        E4 = 3 * (X*Y - Z*Z) * Z*Z,
+        E5 = X*Y*Z*Z*Z;
+    // http://dlmf.nist.gov/19.36.E2
+    // Polynomial is
+    // (1 - 3*E2/14 + E3/6 + 9*E2^2/88 - 3*E4/22 - 9*E2*E3/52 + 3*E5/26
+    //    - E2^3/16 + 3*E3^2/40 + 3*E2*E4/20 + 45*E2^2*E3/272
+    //    - 9*(E3*E4+E2*E5)/68)
+    return ((471240 - 540540 * E2) * E5 +
+        (612612 * E2 - 540540 * E3 - 556920) * E4 +
+        E3 * (306306 * E3 + E2 * (675675 * E2 - 706860) + 680680) +
+        E2 * ((417690 - 255255 * E2) * E2 - 875160) + 4084080) /
+        (4084080 * mul * An * sqrt(An)) + 3 * s;
+}
+
+// direct-only
+static double E(double sn, double cn, double dn)
+{
+    double
+        cn2 = cn*cn, dn2 = dn*dn, sn2 = sn*sn,
+        ei = RF(cn2, dn2, 1) - WGS84_K2 * sn2 * RD(cn2, dn2, 1) / 3;
+    //ei = (_k2 <= 0 ?
+    //    // Carlson, eq. 4.6 and
+    //    // http://dlmf.nist.gov/19.25.E9
+    //    RF(cn2, dn2, 1) - _k2 * sn2 * RD(cn2, dn2, 1) / 3 :
+    //    (_kp2 >= 0 ?
+    //        // http://dlmf.nist.gov/19.25.E10
+    //        _kp2 * RF(cn2, dn2, 1) +
+    //        _k2 * _kp2 * sn2 * RD(cn2, 1, dn2) / 3 +
+    //        _k2 * abs(cn) / dn :
+    //        // http://dlmf.nist.gov/19.25.E11
+    //        -_kp2 * sn2 * RD(dn2, 1, cn2) / 3 + dn / abs(cn)));
+    ei *= fabs(sn);
+    // Enforce usual trig-like symmetries
+    if (cn < 0)
+        ei = 2 * WGS84_Ec - ei;
+    if (sn < 0)
+        ei = -ei;
+    return ei;
+}
+
+// direct-only
+static inline double Ed(double ang)
+{
+    double sn = sin(ang);
+    double cn = cos(ang);
+    return E(sn, cn, Delta(sn, cn));
+}
+
+// direct-only
+static double Einv(double x)
+{
+    double tolJAC = sqrt(DBL_EPSILON * 0.01);
+    double n = floor(x / (2 * WGS84_Ec) + 0.5);
+    x -= 2 * WGS84_Ec * n;      // x now in [-ec, ec)
+                                // Linear approximation
+    double phi = PI * x / (2 * WGS84_Ec); // phi in [-pi/2, pi/2)
+                                          // First order correction
+    phi -= WGS84_EPS * sin(2 * phi) / 2;
+    for (int i = 0; i < SNCNDN_DEPTH; ++i) {
+        double
+            sn = sin(phi),
+            cn = cos(phi),
+            dn = Delta(sn, cn),
+            err = (E(sn, cn, dn) - x) / dn;
+        phi = phi - err;
+        if (fabs(err) < tolJAC)
+            break;
+    }
+    return n * PI + phi;
+}
+
+// direct-only
+static inline double InverseRectifyingLatitude(double mu)
+{
+    if (fabs(mu) == (PI / 2.0))
+        return mu;
+
+    double beta = Einv(mu * WGS84_Ec / (PI / 2.0));
+    double inverse_parametric_lat = atan(tan(beta) / (1.0 - WGS84_f));
+    return inverse_parametric_lat;
+}
+
+// direct-only
+static inline double Dasinh(double x, double y)
+{
+    double d = x - y;
+    double hx = hypot(1.0, x);
+    double hy = hypot(1.0, y);
+    return d ? asinh(x*y > 0 ? d * (x + y) / (x*hy + y*hx) :
+        x*hy - y*hx) / d :
+        1 / hx;
+}
+
+// direct-only
+static inline double Dgdinv(double x, double y)
+{
+    return Dasinh(x, y) / Datan(x, y);
+}
+
+// direct-only
 static inline double DRectifyingToConformal(double mux, double muy)
 {
     const int TM_MAXORD = 6; // from a precision of 2 in GeographicLib
@@ -338,7 +341,8 @@ static inline double DRectifyingToConformal(double mux, double muy)
     return 1 - SinCosSeries(mux, muy, bet, TM_MAXORD);
 }
 
-// params in rad
+
+// direct-only
 static inline double DRectifyingToIsometric(double mux, double muy)
 {
     double latx = InverseRectifyingLatitude(mux);
@@ -349,6 +353,7 @@ static inline double DRectifyingToIsometric(double mux, double muy)
         DRectifyingToConformal(mux, muy);
 }
 
+// direct-only
 RhumbLine RhumbLine_create(double lat1, double lon1, double heading)
 {
     RhumbLine line;
@@ -368,7 +373,9 @@ RhumbLine RhumbLine_create(double lat1, double lon1, double heading)
     line.calp = fabs(line.azi12) == 90 ? 0 : cos(alp12);
 
     // get the rectifying latitude
-    line.mu1 = 90 * MeridianDistance(lat1_rad) / WGS84_QUARTER_MERIDIAN;
+    double parametric_lat = atan((1.0 - WGS84_f) * tan(lat1_rad));
+    double meridian_dist = WGS84_b_METERS * Ed(parametric_lat);
+    line.mu1 = 90 * meridian_dist / WGS84_QUARTER_MERIDIAN;
 
     // get the circle radius at the specified latitude
     double f1 = 1.0 - (1.0f / WGS84_1_f);
@@ -378,13 +385,14 @@ RhumbLine RhumbLine_create(double lat1, double lon1, double heading)
     return line;
 }
 
+// direct-only
 void RhumbLine_Direct(
-    double lat1, double lon1, double heading, double s12,
+    double lat1, double lon1, double heading, double dist,
     double* lat2, double* lon2)
 {
     RhumbLine line = RhumbLine_create(lat1, lon1, heading);
 
-    double mu12 = s12 * line.calp * 90 / WGS84_QUARTER_MERIDIAN;
+    double mu12 = dist * line.calp * 90 / WGS84_QUARTER_MERIDIAN;
     double mu2 = line.mu1 + mu12;
     double lat2x, lon2x;
     if (fabs(mu2) <= 90)
@@ -399,7 +407,7 @@ void RhumbLine_Direct(
         else
         {
             lat2x = line.lat1;
-            lon2x = line.salp * s12 / line.r1;
+            lon2x = line.salp * dist / line.r1;
         }
         lon2x = AngNormalize(AngNormalize(line.lon1) + lon2x);
     }
@@ -415,4 +423,117 @@ void RhumbLine_Direct(
 
     *lat2 = lat2x;
     *lon2 = lon2x;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// inverse-only
+double DConformalToRectifying(double chix, double chiy)
+{
+    const int TM_MAXORD = 6; // from a precision of 2 in GeographicLib
+
+    static const double alp[] = {
+        0.00000000000000000,
+        0.00083773182062446983,
+        7.6085277735723085e-07,
+        1.1976455033294525e-09,
+        2.4291706072013591e-12,
+        5.7117576778658038e-15,
+        1.4911177312583895e-17,
+    };
+
+    return 1 + SinCosSeries(chix, chiy, alp, TM_MAXORD);
+}
+
+// inverse-only
+static inline double gd(double x)
+{
+    return atan(sinh(x));
+}
+
+// inverse-only
+static inline double Dsinh(double x, double y) {
+    double d = (x - y) / 2;
+    return cosh((x + y) / 2) * (d ? sinh(d) / d : 1);
+}
+
+// inverse-only
+static inline double Dgd(double x, double y) {
+    return Datan(sinh(x), sinh(y)) * Dsinh(x, y);
+}
+
+// inverse-only
+static inline double sum(double u, double v, double* t)
+{
+    volatile double s = u + v;
+    volatile double up = s - v;
+    volatile double vpp = s - up;
+    up -= u;
+    vpp -= v;
+    *t = -(up + vpp);
+    // u + v =       s      + t
+    //       = round(u + v) + t
+    return s;
+}
+
+// inverse-only
+static inline double AngDiff(double x, double y)
+{
+    double t;
+    double d = -AngNormalize(
+        sum(remainder(x, 360.0), remainder(-y, 360.0), &t));
+
+    // Here y - x = d - t (mod 360), exactly, where d is in (-180,180] and
+    // abs(t) <= eps (eps = 2^-45 for doubles).  The only case where the
+    // addition of t takes the result outside the range (-180,180] is d = 180
+    // and t < 0.  The case, d = -180 + eps, t = eps, can't happen, since
+    // sum would have returned the exact result in such a case (i.e., given t
+    // = 0).
+    return (d == 180 && t < 0 ? -180 : d) - t;
+}
+
+// inverse-only
+static inline double IsometricLatitude(double phi)
+{
+    phi = DEG_TO_RAD(phi);
+    return RAD_TO_DEG(asinh(taupf(tan(phi), WGS84_es)));
+}
+
+// inverse-only
+double DIsometricToRectifying(double psix, double psiy)
+{
+    psix = DEG_TO_RAD(psix);
+    psiy = DEG_TO_RAD(psiy);
+    return DConformalToRectifying(gd(psix), gd(psiy)) * Dgd(psix, psiy);
+}
+
+// inverse-only
+void RhumbLine_Inverse(
+    double lat1, double lon1, double lat2, double lon2,
+    double* dist, double* heading)
+{
+    double
+        lon12 = AngDiff(lon1, lon2),
+        psi1 = IsometricLatitude(lat1),
+        psi2 = IsometricLatitude(lat2),
+        psi12 = psi2 - psi1,
+        h = hypot(lon12, psi12);
+    *heading = RAD_TO_DEG(atan2(lon12, psi12));
+    double dmudpsi = DIsometricToRectifying(psi2, psi1);
+    *dist = h * dmudpsi * WGS84_QUARTER_MERIDIAN / 90;
 }

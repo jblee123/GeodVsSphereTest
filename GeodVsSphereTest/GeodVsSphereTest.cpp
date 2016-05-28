@@ -1924,23 +1924,43 @@ void testRhumbApprox1() {
 
 void testPortedRhumbCode() {
 
-    struct Query
+    struct DirectTestData
     {
         double lat, lon, heading, dist;
     };
 
+    struct InverseTestData
+    {
+        double lat1, lon1, lat2, lon2;
+    };
+
     double max_dlat = 0;
     double max_dlon = 0;
-    auto doATest = [&] (Query q) {
+    auto DoDirectTest = [&] (DirectTestData d) {
         double lat2_gl, lon2_gl;
         double lat2_mc, lon2_mc;
 
-        rhumb.Direct(q.lat, q.lon, q.heading, q.dist, lat2_gl, lon2_gl);
-        RhumbLine_Direct(q.lat, q.lon, q.heading, q.dist, &lat2_mc, &lon2_mc);
+        rhumb.Direct(d.lat, d.lon, d.heading, d.dist, lat2_gl, lon2_gl);
+        RhumbLine_Direct(d.lat, d.lon, d.heading, d.dist, &lat2_mc, &lon2_mc);
         double dlat = abs(lat2_gl - lat2_mc);
         double dlon = abs(lon2_gl - lon2_mc);
         max_dlat = std::max(max_dlat, dlat);
         max_dlon = std::max(max_dlon, dlon);
+        int a = 0;
+    };
+
+    double max_ddist = 0;
+    double max_dheading = 0;
+    auto DoInverseTest = [&](InverseTestData d) {
+        double dist_gl, heading_gl;
+        double dist_mc, heading_mc;
+
+        rhumb.Inverse(d.lat1, d.lon1, d.lat2, d.lon2, dist_gl, heading_gl);
+        RhumbLine_Inverse(d.lat1, d.lon1, d.lat2, d.lon2, &dist_mc, &heading_mc);
+        double ddist = abs(dist_gl - dist_mc);
+        double dheading = abs(heading_gl - heading_mc);
+        max_ddist = std::max(max_ddist, ddist);
+        max_dheading = std::max(max_dheading, dheading);
         int a = 0;
     };
 
@@ -1951,9 +1971,12 @@ void testPortedRhumbCode() {
         double lon1 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
         double dir = ((double)rand() / (double)RAND_MAX) * 90.0;
         double dist = ((double)rand() / (double)RAND_MAX) * 20000.0;
+        double lat2 = ((double)rand() / (double)RAND_MAX) * 90.0;
+        double lon2 = ((double)rand() / (double)RAND_MAX) * 360.0 - 180.0;
 
         //doATest({ 0, 0, 45, 100000 });
-        doATest({ lat1, lon1, dir, dist });
+        DoDirectTest({ lat1, lon1, dir, dist });
+        DoInverseTest({ lat1, lon1, lat2, lon2 });
     }
     int a = 0;
     //doATest({ 0, 0, 45, 100000 });

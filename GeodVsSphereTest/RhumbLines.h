@@ -15,8 +15,12 @@ typedef struct
 } RhumbLine;
 
 void RhumbLine_Direct(
-    double lat1, double lon1, double heading, double s12,
+    double lat1, double lon1, double heading, double dist,
     double* lat2, double* lon2);
+
+void RhumbLine_Inverse(
+    double lat1, double lon1, double lat2, double lon2,
+    double* dist, double* heading);
 
 #ifdef __cplusplus
 }
